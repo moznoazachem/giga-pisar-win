@@ -1,0 +1,46 @@
+<Window x:Class="GigaPisar.App.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="470" SizeToContent="Height"
+        ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI Variable, Segoe UI" FontSize="13">
+    <StackPanel Margin="24,16,24,20">
+        <TextBlock x:Name="Heading" FontSize="18" FontWeight="SemiBold"/>
+        <TextBlock x:Name="Intro" Margin="0,4,0,0" Opacity="0.8" TextWrapping="Wrap"/>
+
+        <Grid Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="180"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <TextBlock x:Name="HotkeyLabel" Grid.Row="0" Grid.Column="0" VerticalAlignment="Center"/>
+            <ComboBox Grid.Row="0" Grid.Column="1" x:Name="HotkeyBox" MinWidth="200" HorizontalAlignment="Left" SelectionChanged="Hotkey_Changed"/>
+            <TextBlock x:Name="InsertLabel" Grid.Row="1" Grid.Column="0" Margin="0,10,0,0" VerticalAlignment="Center"/>
+            <ComboBox Grid.Row="1" Grid.Column="1" x:Name="InsertBox" Margin="0,10,0,0" MinWidth="200" HorizontalAlignment="Left" SelectionChanged="Insert_Changed"/>
+            <TextBlock x:Name="LanguageLabel" Grid.Row="2" Grid.Column="0" Margin="0,10,0,0" VerticalAlignment="Center"/>
+            <ComboBox Grid.Row="2" Grid.Column="1" x:Name="LanguageBox" Margin="0,10,0,0" MinWidth="200" HorizontalAlignment="Left" SelectionChanged="Language_Changed"/>
+        </Grid>
+
+        <CheckBox x:Name="OverlayBox" Margin="0,16,0,0" Click="Overlay_Click"/>
+        <CheckBox x:Name="AutostartBox" Margin="0,8,0,0" Click="Autostart_Click"/>
+        <CheckBox x:Name="KeepBox" Margin="0,8,0,0" Click="Keep_Click"/>
+
+        <Separator Margin="0,18,0,12"/>
+        <TextBlock x:Name="AboutHeading" FontSize="15" FontWeight="SemiBold"/>
+        <TextBlock x:Name="About" Margin="0,4,0,0" Opacity="0.8" TextWrapping="Wrap"/>
+        <TextBlock x:Name="MicLine" Margin="0,4,0,0" Opacity="0.8" TextWrapping="Wrap"/>
+        <TextBlock Margin="0,6,0,0">
+            <Hyperlink NavigateUri="https://gigapisar.github.io" RequestNavigate="Link_Click">gigapisar.github.io</Hyperlink>
+            <Run Text="  ·  "/>
+            <Hyperlink NavigateUri="https://github.com/salute-developers/GigaAM" RequestNavigate="Link_Click"><Run x:Name="ModelLink"/></Hyperlink>
+        </TextBlock>
+        <TextBlock Margin="0,4,0,0">
+            <Hyperlink Click="Log_Click"><Run x:Name="LogLink"/></Hyperlink>
+        </TextBlock>
+    </StackPanel>
+</Window>

@@ -1,0 +1,17 @@
+<Window x:Class="GigaPisar.App.OverlayWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False" Focusable="False"
+        ResizeMode="NoResize" SizeToContent="WidthAndHeight" IsHitTestVisible="False">
+    <Border x:Name="Panel" CornerRadius="14" Padding="16,10" Margin="12" Background="#FFFFFFFF" BorderBrush="#FFD6E4D8" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="18" ShadowDepth="2" Opacity="0.18" Color="#10231A"/>
+        </Border.Effect>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <StackPanel x:Name="Bars" Orientation="Horizontal" Height="30" VerticalAlignment="Center"/>
+            <TextBlock x:Name="Label" Margin="12,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"
+                       Foreground="#3D5548" FontSize="13" FontFamily="Segoe UI Variable, Segoe UI"/>
+        </StackPanel>
+    </Border>
+</Window>
