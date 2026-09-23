@@ -3,11 +3,12 @@
 #   ./build.sh          publish + installer
 #   ./build.sh --sync   only copy sources
 #
+# The Windows side must use cmd.exe as the OpenSSH default shell.
 # Machine settings live in build.local (not committed):
 #   BUILD_HOST=user@host        SSH target (Windows with OpenSSH, .NET 10 SDK, Inno Setup 6)
 #   BUILD_KEY=~/.ssh/key        private key for that host
 #   BUILD_DIR='C:\path\to\repo' working copy on the Windows side
-set -e
+set -e -o pipefail
 cd "$(dirname "$0")"
 [[ -f build.local ]] || { echo "build.local is missing, see build.sh header"; exit 1; }
 source build.local

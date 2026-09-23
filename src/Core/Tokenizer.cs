@@ -31,8 +31,8 @@ public sealed class Tokenizer
             if (field == 1 && wire == 2)
             {
                 if (!Varint(data, ref i, out ulong len)) break;
+                if (len > (ulong)(data.Length - i)) break;
                 int end = i + (int)len;
-                if (end > data.Length) break;
                 pieces.Add(Piece(data, i, end));
                 i = end;
             }
@@ -53,8 +53,8 @@ public sealed class Tokenizer
             if (field == 1 && wire == 2)
             {
                 if (!Varint(d, ref i, out ulong len)) break;
-                int end = Math.Min(i + (int)len, to);
-                return Encoding.UTF8.GetString(d, i, end - i);
+                if (len > (ulong)(to - i)) break;
+                return Encoding.UTF8.GetString(d, i, (int)len);
             }
             if (!Skip(d, ref i, wire)) break;
         }
@@ -84,7 +84,8 @@ public sealed class Tokenizer
             case 1: i += 8; return i <= d.Length;
             case 2:
                 if (!Varint(d, ref i, out ulong len)) return false;
-                i += (int)len; return i <= d.Length;
+                if (len > (ulong)(d.Length - i)) return false;
+                i += (int)len; return true;
             case 5: i += 4; return i <= d.Length;
             default: return false;
         }
@@ -95,7 +96,7 @@ public sealed class Tokenizer
     {
         var sb = new StringBuilder();
         foreach (var id in ids)
-            if (id >= 0 && id < Pieces.Count) sb.Append(Pieces[id]);
+            if (id >= 0 && id < Pieces.Count && !Pieces[id].StartsWith('<')) sb.Append(Pieces[id]);   // skip <unk> and friends
         return sb.Replace('▁', ' ').ToString().Trim();
     }
 }

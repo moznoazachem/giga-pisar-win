@@ -1,35 +1,69 @@
 // Global push-to-talk key. A low-level keyboard hook sees the key before any
 // application does; we swallow it so the app underneath never notices the
 // modifier being held.
+//
+// The hook lives on its own thread with its own message loop. Windows delivers
+// every keystroke in the system to that thread and silently removes the hook
+// if the callback is not serviced within a few hundred milliseconds, so it must
+// never share a thread with anything that can block (audio device opening,
+// clipboard access, recognition).
+
+using System.Runtime.InteropServices;
 
 namespace GigaPisar.App;
 
 public sealed class KeyboardHook : IDisposable
 {
     private readonly Native.LowLevelKeyboardProc _proc;   // kept alive for the unmanaged side
+    private readonly Thread _thread;
+    private readonly ManualResetEventSlim _ready = new(false);
     private IntPtr _hook;
+    private uint _threadId;
+    private Exception? _installError;
+    private volatile int _hotkeyVk;
     private bool _down;
 
-    public int HotkeyVk { get; set; }
+    public int HotkeyVk { get => _hotkeyVk; set => _hotkeyVk = value; }
+
+    /// <summary>Raised on the hook thread; handlers must return immediately (marshal to the UI thread).</summary>
     public event Action? Pressed;
     public event Action? Released;
 
     public KeyboardHook(int hotkeyVk)
     {
-        HotkeyVk = hotkeyVk;
+        _hotkeyVk = hotkeyVk;
         _proc = Callback;
+        _thread = new Thread(Run) { IsBackground = true, Name = "GigaPisar.KeyboardHook" };
+        _thread.Start();
+        _ready.Wait();
+        if (_installError != null) throw _installError;
+    }
+
+    private void Run()
+    {
+        _threadId = Native.GetCurrentThreadId();
         _hook = Native.SetWindowsHookEx(Native.WH_KEYBOARD_LL, _proc, Native.GetModuleHandle(null), 0);
         if (_hook == IntPtr.Zero)
-            throw new InvalidOperationException("SetWindowsHookEx failed: " + System.Runtime.InteropServices.Marshal.GetLastWin32Error());
+            _installError = new InvalidOperationException("SetWindowsHookEx failed: " + Marshal.GetLastWin32Error());
+        _ready.Set();
+        if (_hook == IntPtr.Zero) return;
+
+        while (Native.GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
+        {
+            Native.TranslateMessage(ref msg);
+            Native.DispatchMessage(ref msg);
+        }
+        Native.UnhookWindowsHookEx(_hook);
+        _hook = IntPtr.Zero;
     }
 
     private IntPtr Callback(int nCode, IntPtr wParam, IntPtr lParam)
     {
         if (nCode >= 0)
         {
-            var info = System.Runtime.InteropServices.Marshal.PtrToStructure<Native.KBDLLHOOKSTRUCT>(lParam);
+            var info = Marshal.PtrToStructure<Native.KBDLLHOOKSTRUCT>(lParam);
             bool injected = (info.flags & Native.LLKHF_INJECTED) != 0;
-            if (!injected && info.vkCode == (uint)HotkeyVk)
+            if (!injected && info.vkCode == (uint)_hotkeyVk)
             {
                 int msg = (int)wParam;
                 if (msg == Native.WM_KEYDOWN || msg == Native.WM_SYSKEYDOWN)
@@ -49,6 +83,8 @@ public sealed class KeyboardHook : IDisposable
 
     public void Dispose()
     {
-        if (_hook != IntPtr.Zero) { Native.UnhookWindowsHookEx(_hook); _hook = IntPtr.Zero; }
+        if (_threadId != 0) Native.PostThreadMessage(_threadId, Native.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+        _thread.Join(1000);
+        _ready.Dispose();
     }
 }

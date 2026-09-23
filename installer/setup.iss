@@ -2,7 +2,7 @@
 ; Expects the published app in ..\dist\app (dotnet publish output).
 
 #define AppExe "GigaPisar.exe"
-#define AppVersion GetVersionNumbersString("..\dist\app\GigaPisar.exe")
+#define AppVersion GetStringFileInfo("..\dist\app\GigaPisar.exe", "ProductVersion")
 #define AppPublisher "Giga Pisar"
 #define AppUrl "https://gigapisar.github.io"
 
@@ -31,8 +31,8 @@ SolidCompression=yes
 WizardStyle=modern
 ShowLanguageDialog=auto
 DisableWelcomePage=no
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+ArchitecturesAllowed=x64os
+ArchitecturesInstallIn64BitMode=x64os
 CloseApplications=yes
 RestartApplications=no
 MinVersion=10.0.17763
@@ -74,5 +74,7 @@ Type: filesandordirs; Name: "{localappdata}\GigaPisar"
 Type: filesandordirs; Name: "{userappdata}\GigaPisar"
 
 [Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GigaPisar"; ValueData: """{app}\{#AppExe}"""; Flags: uninsdeletevalue; Tasks: autostart
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GigaPisar"; ValueData: """{app}\{#AppExe}"""; Tasks: autostart
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "GigaPisar"; Flags: deletevalue; Tasks: not autostart
+; Whatever set the value (installer task or the app's own checkbox), uninstall removes it.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "GigaPisar"; Flags: uninsdeletevalue

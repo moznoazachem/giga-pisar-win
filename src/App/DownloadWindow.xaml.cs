@@ -72,7 +72,16 @@ public partial class DownloadWindow : Window
         {
             Log.Write($"download failed: {e}");
             Bar.IsIndeterminate = false;
-            Status.Text = L.T("Не получилось скачать. Проверьте интернет и попробуйте ещё раз.", "Download failed. Check your connection and try again.");
+            var kind = (e as ModelDownloadException)?.Kind ?? DownloadFailure.Network;
+            Status.Text = kind switch
+            {
+                DownloadFailure.NoSpace => L.T("Мало места на диске: нужно около 1 ГБ свободных. Освободите место и повторите.",
+                                               "Not enough disk space: about 1 GB is needed. Free some space and retry."),
+                DownloadFailure.Corrupt => L.T("Скачанный архив повреждён или подменён. Попробуйте ещё раз позже.",
+                                               "The downloaded archive is damaged or does not match. Try again later."),
+                _ => L.T("Не получилось скачать. Проверьте интернет и попробуйте ещё раз.",
+                         "Download failed. Check your connection and try again."),
+            };
             RetryButton.Visibility = Visibility.Visible;
         }
     }
@@ -82,6 +91,8 @@ public partial class DownloadWindow : Window
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
         _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
         _done?.TrySetResult(false);
         Close();
     }

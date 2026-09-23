@@ -23,6 +23,8 @@ internal static class Native
     public const uint KEYEVENTF_UNICODE = 0x0004;
     public const ushort VK_CONTROL = 0x11;
     public const ushort VK_V = 0x56;
+    public const ushort VK_RETURN = 0x0D;
+    public const uint WM_QUIT = 0x0012;
 
     public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
@@ -50,7 +52,7 @@ internal static class Native
     public struct INPUTUNION
     {
         [FieldOffset(0)] public KEYBDINPUT ki;
-        [FieldOffset(0)] public MOUSEINPUT mi;
+        [FieldOffset(0)] public MOUSEINPUT mi;   // never used, but it sets the union size (INPUT must be 40 bytes on x64)
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -84,6 +86,17 @@ internal static class Native
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    public struct MSG
+    {
+        public IntPtr hwnd;
+        public uint message;
+        public UIntPtr wParam;
+        public IntPtr lParam;
+        public uint time;
+        public POINT pt;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     public struct MONITORINFO
     {
         public int cbSize;
@@ -104,6 +117,19 @@ internal static class Native
     [DllImport("user32.dll", SetLastError = true)]
     public static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")]
+    public static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
+    [DllImport("user32.dll")]
+    public static extern bool TranslateMessage(ref MSG lpMsg);
+    [DllImport("user32.dll")]
+    public static extern IntPtr DispatchMessage(ref MSG lpMsg);
+    [DllImport("user32.dll")]
+    public static extern bool PostThreadMessage(uint idThread, uint msg, IntPtr wParam, IntPtr lParam);
+    [DllImport("user32.dll")]
+    public static extern bool DestroyIcon(IntPtr hIcon);
+
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")]
@@ -112,8 +138,6 @@ internal static class Native
     public static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
     [DllImport("user32.dll")]
     public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
-    [DllImport("user32.dll")]
-    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
     [DllImport("user32.dll")]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
     [DllImport("user32.dll")]
@@ -128,12 +152,9 @@ internal static class Native
     public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
     [DllImport("user32.dll")]
     public static extern uint GetDpiForWindow(IntPtr hwnd);
-    [DllImport("user32.dll")]
-    public static extern bool GetCursorPos(out POINT lpPoint);
 
     public const uint MONITOR_DEFAULTTONEAREST = 2;
     public static readonly IntPtr HWND_TOPMOST = new(-1);
     public const uint SWP_NOACTIVATE = 0x0010;
-    public const uint SWP_SHOWWINDOW = 0x0040;
     public const uint SWP_NOSIZE = 0x0001;
 }

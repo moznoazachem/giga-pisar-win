@@ -24,6 +24,7 @@ public sealed class Settings
     public static string ModelDir => Path.Combine(LocalDataDir, "model");
     public static string SettingsPath => Path.Combine(AppDataDir, "settings.json");
     public static string LogPath => Path.Combine(LocalDataDir, "pisar.log");
+    public static string LastTakePath => Path.Combine(LocalDataDir, "last.wav");
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -81,7 +82,7 @@ public static class Log
             {
                 Directory.CreateDirectory(Settings.LocalDataDir);
                 var fi = new FileInfo(Settings.LogPath);
-                if (fi.Exists && fi.Length > 1_000_000) fi.Delete();
+                if (fi.Exists && fi.Length > 1_000_000) fi.MoveTo(Settings.LogPath + ".1", overwrite: true);
                 File.AppendAllText(Settings.LogPath, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {message}{Environment.NewLine}");
             }
         }

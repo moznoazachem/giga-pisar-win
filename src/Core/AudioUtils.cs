@@ -16,10 +16,14 @@ public static class AudioUtils
         while (i + 8 <= d.Length)
         {
             uint id = BitConverter.ToUInt32(d, i);
-            int size = (int)BitConverter.ToUInt32(d, i + 4);
+            uint size32 = BitConverter.ToUInt32(d, i + 4);
             int body = i + 8;
+            if (size32 > (uint)(d.Length - body)) throw new InvalidDataException($"Truncated WAV: {path}");
+            int size = (int)size32;
             if (id == 0x20746D66u) // "fmt "
             {
+                if (body + 16 > d.Length) throw new InvalidDataException($"Truncated WAV header: {path}");
+                if (BitConverter.ToUInt16(d, body) != 1) throw new InvalidDataException($"Expected PCM WAV: {path}");
                 channels = BitConverter.ToUInt16(d, body + 2);
                 rate = (int)BitConverter.ToUInt32(d, body + 4);
                 bits = BitConverter.ToUInt16(d, body + 14);

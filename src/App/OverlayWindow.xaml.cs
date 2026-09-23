@@ -28,6 +28,8 @@ public partial class OverlayWindow : Window
     private readonly Random _rng = new();
     private Recorder? _recorder;
     private float _smoothed;
+    private int _hintSerial;
+    private const int HintMs = 2200;
 
     public OverlayWindow()
     {
@@ -58,6 +60,7 @@ public partial class OverlayWindow : Window
 
     public void ShowListening(Recorder recorder)
     {
+        _hintSerial++;
         _recorder = recorder;
         Label.Visibility = Visibility.Collapsed;
         Bars.Visibility = Visibility.Visible;
@@ -94,8 +97,10 @@ public partial class OverlayWindow : Window
         Label.Visibility = Visibility.Visible;
         Place();
         if (!IsVisible) Show();
-        await Task.Delay(2200);
-        if (Label.Text == text) Hide();
+        int mine = ++_hintSerial;
+        await Task.Delay(HintMs);
+        // A new take may have started meanwhile; only the latest hint may hide the card.
+        if (mine == _hintSerial && _recorder == null) Hide();
     }
 
     private void Tick()

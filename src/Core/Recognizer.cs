@@ -97,6 +97,7 @@ public sealed class Recognizer : IDisposable
         var encShape = encOut[0].GetTensorTypeAndShape().Shape;   // [1, encD, encT]
         int encD = (int)encShape[1], encT = (int)encShape[2];
         var encoded = encOut[0].GetTensorDataAsSpan<float>().ToArray();
+        // The export takes int64 lengths but returns encoded_len as int32; a re-export may change this.
         int encLen = Math.Min((int)encOut[1].GetTensorDataAsSpan<int>()[0], encT);
 
         return _tokenizer.Decode(GreedyRnnt(encoded, encD, encT, encLen));
@@ -143,6 +144,8 @@ public sealed class Recognizer : IDisposable
 
                 using var jointOut = _joint.Run(_runOptions, jointInputs, _joint.OutputNames);
                 var logits = jointOut[0].GetTensorDataAsSpan<float>();
+                if (logits.Length != blank + 1)
+                    throw new InvalidDataException($"Tokenizer has {blank} pieces but the joint network outputs {logits.Length} classes");
                 int best = 0;
                 float bestValue = float.NegativeInfinity;
                 for (int i = 0; i < logits.Length; i++)

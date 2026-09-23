@@ -97,6 +97,8 @@ public partial class SettingsWindow : Window
     private void Keep_Click(object sender, RoutedEventArgs e)
     {
         _settings.KeepLastRecording = KeepBox.IsChecked == true;
+        if (!_settings.KeepLastRecording)
+            try { File.Delete(Settings.LastTakePath); } catch { }
         _apply();
     }
 

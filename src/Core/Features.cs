@@ -26,6 +26,8 @@ public sealed class Features
     public Features(FeatureConfig cfg)
     {
         Config = cfg;
+        if (cfg.WinLength != cfg.NFft)
+            throw new NotSupportedException("win_length must equal n_fft; torch would center-pad the window");
         _nFreqs = cfg.NFft / 2 + 1;
 
         // Periodic Hann window, same as torch.hann_window(periodic=True).

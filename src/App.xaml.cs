@@ -5,15 +5,15 @@
 // Release: recognize and insert the text where the caret is.
 
 using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
-using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
 namespace GigaPisar.App;
 
 public partial class PisarApp : Application
 {
-    public const string Version = "1.0.0";
+    public static readonly string Version = ReadVersion();
     public const string SiteUrl = "https://gigapisar.github.io";
     public const string RepoUrl = "https://github.com/moznoazachem/giga-pisar-win";
 
@@ -26,10 +26,14 @@ public partial class PisarApp : Application
     private const float TargetPeak = 0.5f;
     private const float MaxGain = 200f;
 
+    /// <summary>Takes shorter than this are treated as an accidental key press.</summary>
+    private const int MinTakeSamples = Recorder.SampleRate / 4;
+
     private Settings _settings = new();
     private Forms.NotifyIcon? _tray;
     private System.Drawing.Icon? _iconIdle;
     private System.Drawing.Icon? _iconBusy;
+    private IntPtr _busyIconHandle;
     private Core.Recognizer? _recognizer;
     private KeyboardHook? _hook;
     private readonly Recorder _recorder = new();
@@ -55,6 +59,13 @@ public partial class PisarApp : Application
         };
         app.Startup += app.OnStartup;
         return app.Run();
+    }
+
+    private static string ReadVersion()
+    {
+        var info = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
+        int plus = info.IndexOf('+');
+        return plus > 0 ? info[..plus] : info;
     }
 
     /// <summary>Headless mode for testing: recognize a WAV file, write the text to a file.</summary>
@@ -88,7 +99,7 @@ public partial class PisarApp : Application
         Log.Write($"start v{Version}");
 
         _iconIdle = LoadIcon();
-        _iconBusy = MakeBusyIcon(_iconIdle);
+        _iconBusy = MakeBusyIcon(_iconIdle, out _busyIconHandle);
         _tray = new Forms.NotifyIcon
         {
             Icon = _iconIdle,
@@ -118,11 +129,12 @@ public partial class PisarApp : Application
             return;
         }
 
+        _recorder.TakeTooLong += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync());
         try
         {
             _hook = new KeyboardHook(_settings.HotkeyVk);
-            _hook.Pressed += OnKeyPressed;
-            _hook.Released += OnKeyReleased;
+            _hook.Pressed += () => Dispatcher.BeginInvoke(() => _ = HandlePressAsync());
+            _hook.Released += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync());
         }
         catch (Exception ex)
         {
@@ -134,8 +146,6 @@ public partial class PisarApp : Application
         {
             _settings.FirstRunDone = true;
             _settings.Save();
-            // A dictation tool is useless when it is not running: start with Windows unless the user opts out.
-            try { Autostart.Set(true); } catch (Exception ex) { Log.Write($"autostart failed: {ex.Message}"); }
             _tray.ShowBalloonTip(8000, L.T("Гига Писарь готов", "Giga Pisar is ready"),
                 L.T($"Поставьте курсор в любой текст, зажмите {Settings.HotkeyTitle(_settings.HotkeyVk)} и говорите. Отпустите, и текст появится сам.",
                     $"Put the cursor in any text, hold {Settings.HotkeyTitle(_settings.HotkeyVk)} and speak. Release, and the text appears by itself."),
@@ -145,98 +155,116 @@ public partial class PisarApp : Application
 
     // ── push-to-talk ─────────────────────────────────────────────
 
-    private void OnKeyPressed()
+    private async Task HandlePressAsync()
     {
-        Dispatcher.BeginInvoke(() =>
+        if (_busy || _recognizer == null || _recorder.IsRecording) return;
+        try
         {
-            if (_busy || _recognizer == null || _recorder.IsRecording) return;
-            try
-            {
-                _recorder.Start();
-            }
-            catch (Exception ex)
-            {
-                Log.Write($"mic failed: {ex.Message}");
-                _tray?.ShowBalloonTip(5000, L.T("Микрофон недоступен", "Microphone unavailable"),
-                    L.T("Проверьте, что микрофон подключён и разрешён в Параметрах, раздел Конфиденциальность, Микрофон.",
-                        "Check that a microphone is connected and allowed in Settings, Privacy, Microphone."),
-                    Forms.ToolTipIcon.Warning);
-                return;
-            }
-            if (_tray != null) _tray.Icon = _iconBusy;
-            if (_settings.ShowOverlay)
-            {
-                _overlay ??= new OverlayWindow();
-                _overlay.ShowListening(_recorder);
-            }
-        });
+            await _recorder.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"mic failed: {ex.Message}");
+            _tray?.ShowBalloonTip(5000, L.T("Микрофон недоступен", "Microphone unavailable"),
+                L.T("Проверьте, что микрофон подключён и разрешён в Параметрах, раздел Конфиденциальность, Микрофон.",
+                    "Check that a microphone is connected and allowed in Settings, Privacy, Microphone."),
+                Forms.ToolTipIcon.Warning);
+            return;
+        }
+        if (_tray != null) _tray.Icon = _iconBusy;
+        if (_settings.ShowOverlay)
+        {
+            _overlay ??= new OverlayWindow();
+            _overlay.ShowListening(_recorder);
+        }
     }
 
-    private void OnKeyReleased()
+    private async Task HandleReleaseAsync()
     {
-        Dispatcher.BeginInvoke(async () =>
+        if (!_recorder.IsRecording || _busy) return;
+        _busy = true;
+        var overlay = _settings.ShowOverlay ? _overlay : null;
+        try
         {
-            if (!_recorder.IsRecording) return;
-            var samples = _recorder.Stop();
-            _overlay?.ShowRecognizing();
-            _busy = true;
-            try
+            var samples = await _recorder.StopAsync();
+            overlay?.ShowRecognizing();
+
+            float peak = _recorder.TakePeak;
+            // The model invents words when fed silence or flat noise. Absolute level is a poor
+            // test (a line-level receiver on a mic jack sits 50 dB down), so we look for speech
+            // dynamics: loud stretches well above the quiet ones.
+            bool silent = peak < SilenceFloor || !HasSpeechDynamics(samples);
+            Log.Write($"take {samples.Length / (double)Recorder.SampleRate:F1}s peak {20 * Math.Log10(Math.Max(peak, 1e-9)):F0} dBFS silent={silent}");
+
+            string text = "";
+            if (!silent && samples.Length > MinTakeSamples)
             {
                 if (_settings.KeepLastRecording)
-                    Core.AudioUtils.WriteWav(samples, Recorder.SampleRate, Path.Combine(Settings.LocalDataDir, "last.wav"));
+                    Core.AudioUtils.WriteWav(samples, Recorder.SampleRate, Settings.LastTakePath);
 
-                string text = "";
-                float peak = _recorder.TakePeak;
-                // The model invents words when fed silence or flat noise. Absolute level is a poor
-                // test (a line-level receiver on a mic jack sits 50 dB down), so we look for speech
-                // dynamics: loud stretches well above the quiet ones.
-                bool silent = peak < SilenceFloor || !HasSpeechDynamics(samples);
-                Log.Write($"take {samples.Length / (double)Recorder.SampleRate:F1}s peak {20 * Math.Log10(Math.Max(peak, 1e-9)):F0} dBFS silent={silent}");
-                if (!silent && samples.Length > Recorder.SampleRate / 4)   // shorter than a quarter second is a slip
+                // Windows input levels vary wildly (a line-level receiver on a mic jack can sit
+                // 50 dB down). Normalize quiet takes so the model sees ordinary speech.
+                if (peak < TargetPeak)
                 {
-                    // Windows input levels vary wildly (a line-level receiver on a mic jack can sit
-                    // 50 dB down). Normalize quiet takes so the model sees ordinary speech.
-                    if (peak < TargetPeak)
-                    {
-                        float gain = Math.Min(TargetPeak / peak, MaxGain);
-                        for (int i = 0; i < samples.Length; i++) samples[i] *= gain;
-                        Log.Write($"take peak {20 * Math.Log10(peak):F0} dBFS, gain x{gain:F0}");
-                    }
-                    text = await Task.Run(() => _recognizer!.Transcribe(samples, Recorder.SampleRate));
+                    float gain = Math.Min(TargetPeak / peak, MaxGain);
+                    for (int i = 0; i < samples.Length; i++) samples[i] *= gain;
                 }
+                text = await Task.Run(() => _recognizer!.Transcribe(samples, Recorder.SampleRate));
+            }
 
-                if (text.Length > 0)
-                {
-                    _overlay?.HideNow();
-                    TextInserter.Insert(text, _settings.InsertMode);
-                }
-                else if (_overlay != null)
-                {
-                    // Silence in, nothing out: say so instead of quietly doing nothing.
-                    _overlay.ShowHint(silent
-                        ? L.T("Тишина на входе. Проверьте микрофон и его громкость: " + Recorder.DefaultDeviceName(),
-                              "Silence on input. Check the microphone and its level: " + Recorder.DefaultDeviceName())
-                        : L.T("Не разобрал. Попробуйте ещё раз ближе к микрофону.",
-                              "Could not make it out. Try again closer to the microphone."));
-                }
-            }
-            catch (Exception ex)
+            if (text.Length > 0)
             {
-                Log.Write($"recognize failed: {ex}");
-                _overlay?.HideNow();
+                overlay?.HideNow();
+                var mode = _settings.InsertMode;
+                var result = await Task.Run(() => TextInserter.Insert(text, mode));
+                if (result == InsertResult.Blocked)
+                    Hint(L.T("Это окно запущено от администратора, вставить туда нельзя. Текст лежит в буфере обмена.",
+                             "That window runs as administrator; typing into it is blocked. The text is on the clipboard."));
             }
-            finally
+            else if (samples.Length <= MinTakeSamples)
             {
-                _busy = false;
-                if (_tray != null) _tray.Icon = _iconIdle;
+                overlay?.HideNow();
             }
-        });
+            else
+            {
+                Hint(silent
+                    ? L.T("Тишина на входе. Проверьте микрофон и его громкость: " + Recorder.DefaultDeviceName(),
+                          "Silence on input. Check the microphone and its level: " + Recorder.DefaultDeviceName())
+                    : L.T("Не разобрал. Попробуйте ещё раз ближе к микрофону.",
+                          "Could not make it out. Try again closer to the microphone."));
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"take failed: {ex}");
+            overlay?.HideNow();
+        }
+        finally
+        {
+            _busy = false;
+            if (_tray != null) _tray.Icon = _iconIdle;
+        }
+    }
+
+    /// <summary>Short feedback for the user: on the overlay when it is enabled, otherwise as a balloon.</summary>
+    private void Hint(string text)
+    {
+        if (_settings.ShowOverlay)
+        {
+            _overlay ??= new OverlayWindow();
+            _overlay.ShowHint(text);
+        }
+        else
+        {
+            _tray?.ShowBalloonTip(4000, L.T("Гига Писарь", "Giga Pisar"), text, Forms.ToolTipIcon.None);
+        }
     }
 
     /// <summary>True when the take has bursts (speech) rather than a flat floor (silence or hum).</summary>
     private static bool HasSpeechDynamics(float[] samples)
     {
         const int window = Recorder.SampleRate / 10;   // 100 ms
+        const double minLoudToQuietRatio = 2;          // permissive on purpose: a wrong "silence" verdict hides real speech
         int n = samples.Length / window;
         if (n < 3) return true;   // too short to judge; let the model decide
         var rms = new double[n];
@@ -249,7 +277,7 @@ public partial class PisarApp : Application
         Array.Sort(rms);
         double quiet = rms[n / 4] + 1e-7;          // lower quartile: the floor
         double loud = rms[n - 1 - n / 20];         // near the top, ignoring one-off clicks
-        return loud / quiet > 2;   // permissive on purpose: a wrong "silence" verdict hides real speech
+        return loud / quiet > minLoudToQuietRatio;
     }
 
     // ── tray ─────────────────────────────────────────────────────
@@ -311,6 +339,7 @@ public partial class PisarApp : Application
     {
         _settings.Save();
         if (_hook != null) _hook.HotkeyVk = _settings.HotkeyVk;
+        if (!_settings.ShowOverlay) _overlay?.HideNow();
 
         bool wasRussian = L.Russian;
         L.Apply(_settings.Language);
@@ -335,6 +364,9 @@ public partial class PisarApp : Application
         _overlay?.Close();
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         _recognizer?.Dispose();
+        _iconBusy?.Dispose();
+        if (_busyIconHandle != IntPtr.Zero) Native.DestroyIcon(_busyIconHandle);
+        _iconIdle?.Dispose();
         Shutdown();
     }
 
@@ -347,8 +379,8 @@ public partial class PisarApp : Application
         return System.Drawing.SystemIcons.Application;
     }
 
-    /// <summary>Same icon with a red dot: "listening".</summary>
-    private static System.Drawing.Icon MakeBusyIcon(System.Drawing.Icon idle)
+    /// <summary>Same icon with a red dot: "listening". The HICON must be destroyed by the caller.</summary>
+    private static System.Drawing.Icon MakeBusyIcon(System.Drawing.Icon idle, out IntPtr handle)
     {
         using var bmp = idle.ToBitmap();
         using var g = System.Drawing.Graphics.FromImage(bmp);
@@ -358,6 +390,7 @@ public partial class PisarApp : Application
         using var pen = new System.Drawing.Pen(System.Drawing.Color.White, Math.Max(1, bmp.Width / 16));
         g.FillEllipse(brush, bmp.Width - d, bmp.Height - d, d - 1, d - 1);
         g.DrawEllipse(pen, bmp.Width - d, bmp.Height - d, d - 1, d - 1);
-        return System.Drawing.Icon.FromHandle(bmp.GetHicon());
+        handle = bmp.GetHicon();
+        return System.Drawing.Icon.FromHandle(handle);
     }
 }

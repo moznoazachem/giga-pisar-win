@@ -14,7 +14,7 @@
     <StartupObject>GigaPisar.App.PisarApp</StartupObject>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <Version>1.0.0</Version>
-    <Product>Гига Писарь</Product>
+    <Product>Giga Pisar</Product>
     <Company>Giga Pisar</Company>
     <Copyright>MIT License</Copyright>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
@@ -23,14 +23,14 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <DebugType>none</DebugType>
+    <DebugType>embedded</DebugType>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.22.1" />
     <PackageReference Include="NAudio.WinMM" Version="2.2.1" />
-    <PackageReference Include="NAudio.Core" Version="2.2.1" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,7 +46,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Assets/app.ico" />
     <Content Include="Assets/app.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

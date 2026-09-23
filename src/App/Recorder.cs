@@ -2,6 +2,7 @@
 // The Windows audio engine resamples from whatever the device runs at,
 // so the model gets exactly the format it was trained on.
 
+using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
 namespace GigaPisar.App;
@@ -10,72 +11,99 @@ public sealed class Recorder : IDisposable
 {
     public const int SampleRate = 16000;
 
+    /// <summary>A take longer than this is stopped by itself: the key is stuck or the hook died.</summary>
+    public static readonly TimeSpan MaxTake = TimeSpan.FromMinutes(5);
+
     private WaveInEvent? _waveIn;
+    private ManualResetEventSlim? _stopped;
     private readonly List<float> _samples = new(SampleRate * 30);
-    private readonly ManualResetEventSlim _stopped = new(false);
     private readonly object _gate = new();
-    private float _peak;
+    private float _levelSinceRead;
     private float _takePeak;
+    private bool _capHit;
 
-    /// <summary>Loudest absolute sample of the last take, 0..1. Below ~0.01 the microphone is effectively silent.</summary>
-    public float TakePeak => _takePeak;
-
-    /// <summary>Loudness of the latest buffer, 0..1, shaped for a VU-style display.</summary>
+    /// <summary>Loudness of the buffers since the last read, 0..1, shaped for a VU-style display.</summary>
     public float Level
     {
-        get { lock (_gate) { var p = _peak; _peak = 0; return p; } }
+        get { lock (_gate) { var p = _levelSinceRead; _levelSinceRead = 0; return p; } }
     }
+
+    /// <summary>Loudest absolute sample of the current take, 0..1.</summary>
+    public float TakePeak => _takePeak;
 
     public bool IsRecording { get; private set; }
 
-    /// <summary>Name of the default input device, or a note that there is none.</summary>
+    /// <summary>Raised on the capture thread when the take reaches <see cref="MaxTake"/>.</summary>
+    public event Action? TakeTooLong;
+
+    /// <summary>Friendly name of the Windows default input device.</summary>
     public static string DefaultDeviceName()
     {
         try
         {
-            if (WaveInEvent.DeviceCount == 0) return L.T("не найден", "none found");
-            return WaveInEvent.GetCapabilities(0).ProductName;
+            using var enumerator = new MMDeviceEnumerator();
+            using var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+            return device.FriendlyName;
         }
         catch { return L.T("не найден", "none found"); }
     }
 
-    public void Start()
+    public Task StartAsync()
     {
-        lock (_gate) { _samples.Clear(); _peak = 0; _takePeak = 0; }
-        _stopped.Reset();
+        lock (_gate) { _samples.Clear(); _levelSinceRead = 0; _takePeak = 0; _capHit = false; }
+        var stopped = new ManualResetEventSlim(false);
+        _stopped = stopped;
+        IsRecording = true;
 
+        // WaveInEvent captures SynchronizationContext.Current in its constructor and posts
+        // RecordingStopped through it. Built on a pool thread there is no context, so the
+        // event fires directly on the capture thread and StopAsync does not have to wait for
+        // a UI thread that may be busy.
+        return Task.Run(() =>
+        {
+            WaveInEvent? wi = null;
+            try
+            {
+                wi = Open(-1, stopped);   // WAVE_MAPPER: the default input device
+            }
+            catch
+            {
+                wi?.Dispose();
+                wi = Open(0, stopped);
+            }
+            _waveIn = wi;
+        });
+    }
+
+    private WaveInEvent Open(int deviceNumber, ManualResetEventSlim stopped)
+    {
         var wi = new WaveInEvent
         {
+            DeviceNumber = deviceNumber,
             WaveFormat = new WaveFormat(SampleRate, 16, 1),
             BufferMilliseconds = 40,
             NumberOfBuffers = 4,
         };
         wi.DataAvailable += OnData;
-        wi.RecordingStopped += (_, _) => _stopped.Set();
-        // StartRecording captures SynchronizationContext.Current for its RecordingStopped
-        // event. Started from the UI thread, that event would be posted to the very thread
-        // Stop() blocks on; a thread-pool thread has no context, so it fires directly.
-        Task.Run(() =>
+        wi.RecordingStopped += (_, _) => { try { stopped.Set(); } catch (ObjectDisposedException) { } };
+        try
         {
-            try
-            {
-                wi.DeviceNumber = -1;   // WAVE_MAPPER: the default input device
-                wi.StartRecording();
-            }
-            catch
-            {
-                wi.DeviceNumber = 0;
-                wi.StartRecording();
-            }
-        }).GetAwaiter().GetResult();
-        _waveIn = wi;
-        IsRecording = true;
+            wi.StartRecording();
+        }
+        catch
+        {
+            wi.DataAvailable -= OnData;
+            wi.Dispose();
+            throw;
+        }
+        return wi;
     }
 
     private void OnData(object? sender, WaveInEventArgs e)
     {
         double sum = 0;
         int n = e.BytesRecorded / 2;
+        bool hitCap = false;
         lock (_gate)
         {
             for (int i = 0; i < n; i++)
@@ -91,36 +119,49 @@ public sealed class Recorder : IDisposable
                 double rms = Math.Sqrt(sum / n);
                 double db = 20 * Math.Log10(Math.Max(rms, 1e-6));
                 float level = (float)Math.Clamp((db + 50) / 45, 0, 1);   // -50 dB silence … -5 dB loud
-                _peak = Math.Max(_peak, level);
+                _levelSinceRead = Math.Max(_levelSinceRead, level);
             }
+            if (!_capHit && _samples.Count >= MaxTake.TotalSeconds * SampleRate) { _capHit = true; hitCap = true; }
         }
+        if (hitCap) TakeTooLong?.Invoke();
     }
 
-    /// <summary>Stops capture and returns everything recorded since Start().</summary>
-    public float[] Stop()
+    /// <summary>Stops capture and returns everything recorded since StartAsync().</summary>
+    public Task<float[]> StopAsync()
     {
         var wi = _waveIn;
+        var stopped = _stopped;
         _waveIn = null;
+        _stopped = null;
         IsRecording = false;
-        if (wi == null) return Array.Empty<float>();
+        if (wi == null) return Task.FromResult(Array.Empty<float>());
 
-        wi.StopRecording();
-        _stopped.Wait(500);
-        wi.DataAvailable -= OnData;
-        wi.Dispose();
-
-        lock (_gate)
+        return Task.Run(() =>
         {
-            var result = _samples.ToArray();
-            _samples.Clear();
-            _peak = 0;
-            return result;
-        }
+            try
+            {
+                wi.StopRecording();
+                stopped?.Wait(500);
+            }
+            catch (Exception e) { Log.Write($"waveIn stop: {e.Message}"); }
+            finally
+            {
+                wi.DataAvailable -= OnData;
+                wi.Dispose();
+                stopped?.Dispose();
+            }
+            lock (_gate)
+            {
+                var result = _samples.ToArray();
+                _samples.Clear();
+                _levelSinceRead = 0;
+                return result;
+            }
+        });
     }
 
     public void Dispose()
     {
-        if (_waveIn != null) Stop();
-        _stopped.Dispose();
+        if (_waveIn != null) StopAsync().GetAwaiter().GetResult();
     }
 }
