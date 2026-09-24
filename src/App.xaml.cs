@@ -78,7 +78,7 @@ public partial class PisarApp : Application
         app.Startup += async (_, _) =>
         {
             L.Apply(UiLanguage.Russian);
-            var overlay = new OverlayWindow();
+            var overlay = new OverlayWindow(new Settings(), () => { });
             overlay.ShowListening(null, demo: true);
             await Task.Delay(6000);
             overlay.ShowRecognizing();
@@ -196,7 +196,7 @@ public partial class PisarApp : Application
         if (_tray != null) _tray.Icon = _iconBusy;
         if (_settings.ShowOverlay)
         {
-            _overlay ??= new OverlayWindow();
+            _overlay ??= new OverlayWindow(_settings, _settings.Save);
             _overlay.ShowListening(_recorder);
         }
     }
@@ -273,7 +273,7 @@ public partial class PisarApp : Application
     {
         if (_settings.ShowOverlay)
         {
-            _overlay ??= new OverlayWindow();
+            _overlay ??= new OverlayWindow(_settings, _settings.Save);
             _overlay.ShowHint(text);
         }
         else
@@ -350,7 +350,7 @@ public partial class PisarApp : Application
     {
         if (_settingsWindow == null)
         {
-            _settingsWindow = new SettingsWindow(_settings, ApplySettings);
+            _settingsWindow = new SettingsWindow(_settings, ApplySettings, () => { _overlay?.Unpin(); _settings.OverlayX = null; _settings.OverlayY = null; _settings.Save(); });
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
         _settingsWindow.Show();

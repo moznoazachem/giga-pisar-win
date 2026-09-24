@@ -11,12 +11,14 @@ public partial class SettingsWindow : Window
 {
     private readonly Settings _settings;
     private readonly Action _apply;
+    private readonly Action _unpin;
     private bool _loading = true;
 
-    public SettingsWindow(Settings settings, Action apply)
+    public SettingsWindow(Settings settings, Action apply, Action unpin)
     {
         _settings = settings;
         _apply = apply;
+        _unpin = unpin;
         InitializeComponent();
         Localize();
     }
@@ -53,6 +55,10 @@ public partial class SettingsWindow : Window
         AutostartBox.Content = L.T("Запускать при входе в Windows", "Start when I sign in to Windows");
         KeepBox.Content = L.T("Сохранять последнюю запись для разбора ошибок", "Keep the last recording for troubleshooting");
         OverlayBox.IsChecked = _settings.ShowOverlay;
+        OverlayHint.Text = L.T("Плашку можно перетащить мышью, пока она видна: она запомнит место.",
+                               "Drag the pill with the mouse while it is visible and it will stay there.");
+        UnpinButton.Content = L.T("Вернуть плашку к курсору", "Put the pill back at the caret");
+        UnpinButton.IsEnabled = _settings.OverlayX != null;
         AutostartBox.IsChecked = Autostart.IsEnabled();
         KeepBox.IsChecked = _settings.KeepLastRecording;
 
@@ -93,6 +99,12 @@ public partial class SettingsWindow : Window
     }
 
     private void Autostart_Click(object sender, RoutedEventArgs e) => Autostart.Set(AutostartBox.IsChecked == true);
+
+    private void Unpin_Click(object sender, RoutedEventArgs e)
+    {
+        _unpin();
+        UnpinButton.IsEnabled = false;
+    }
 
     private void Keep_Click(object sender, RoutedEventArgs e)
     {

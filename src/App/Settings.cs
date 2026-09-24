@@ -17,6 +17,10 @@ public sealed class Settings
     public bool FirstRunDone { get; set; } = false;
     public UiLanguage Language { get; set; } = UiLanguage.Auto;
 
+    /// <summary>Where the user dragged the overlay to (screen pixels, window top-left); null means "follow the caret".</summary>
+    public int? OverlayX { get; set; }
+    public int? OverlayY { get; set; }
+
     public static string AppDataDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GigaPisar");
     public static string LocalDataDir =>

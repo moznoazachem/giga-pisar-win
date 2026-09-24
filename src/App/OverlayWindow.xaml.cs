@@ -3,9 +3,10 @@
 // macOS wave panel: thin bars that jump with the voice while listening, a calm
 // ripple while recognizing, a short text for hints. Light or dark following the
 // Windows app theme. Never takes focus: WS_EX_NOACTIVATE keeps the user's app
-// in front.
+// in front. Drag it with the mouse and it stays where you left it.
 
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
@@ -47,9 +48,20 @@ public partial class OverlayWindow : Window
     private bool _busyRipple;
     private double _ripplePhase;
 
-    public OverlayWindow()
+    private readonly Settings _settings;
+    private readonly Action _saveSettings;
+    private bool _dragging;
+    private Point _dragStart;          // screen pixels
+    private Native.RECT _dragWindow;   // window rect when the drag began
+
+    public OverlayWindow(Settings settings, Action saveSettings)
     {
+        _settings = settings;
+        _saveSettings = saveSettings;
         InitializeComponent();
+        Pill.MouseLeftButtonDown += OnDragStart;
+        Pill.MouseMove += OnDragMove;
+        Pill.MouseLeftButtonUp += OnDragEnd;
         for (int i = 0; i < BarCount; i++)
         {
             var (top, bottom) = Palette[i % Palette.Length];
@@ -128,6 +140,52 @@ public partial class OverlayWindow : Window
         await Task.Delay(HintMs);
         // A new take may have started meanwhile; only the latest hint may hide the pill.
         if (mine == _hintSerial && _recorder == null && !_demo) Hide();
+    }
+
+    // ── dragging ─────────────────────────────────────────────────
+
+    private void OnDragStart(object sender, MouseButtonEventArgs e)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (!Native.GetWindowRect(hwnd, out _dragWindow)) return;
+        _dragStart = PointToScreen(e.GetPosition(this));
+        _dragging = true;
+        Pill.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnDragMove(object sender, MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        var now = PointToScreen(e.GetPosition(this));
+        int x = _dragWindow.Left + (int)(now.X - _dragStart.X);
+        int y = _dragWindow.Top + (int)(now.Y - _dragStart.Y);
+        var hwnd = new WindowInteropHelper(this).Handle;
+        Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, x, y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+    }
+
+    private void OnDragEnd(object sender, MouseButtonEventArgs e)
+    {
+        if (!_dragging) return;
+        _dragging = false;
+        Pill.ReleaseMouseCapture();
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (Native.GetWindowRect(hwnd, out var r))
+        {
+            // Remember the window's top-left; a differently sized pill (a hint) starts from the same edge.
+            _settings.OverlayX = r.Left;
+            _settings.OverlayY = r.Top;
+            _saveSettings();
+        }
+        e.Handled = true;
+    }
+
+    /// <summary>Forget the dragged position: the pill follows the caret again.</summary>
+    public void Unpin()
+    {
+        _settings.OverlayX = null;
+        _settings.OverlayY = null;
+        _saveSettings();
     }
 
     /// <summary>Pill and window sized around the content with equal side padding.</summary>
@@ -215,7 +273,12 @@ public partial class OverlayWindow : Window
 
         var fg = Native.GetForegroundWindow();
         int x, y;
-        if (TryCaret(fg, out var caret))
+        if (_settings.OverlayX is int px && _settings.OverlayY is int py)
+        {
+            x = px;
+            y = py;
+        }
+        else if (TryCaret(fg, out var caret))
         {
             x = caret.X - w / 2;
             y = caret.Y + (int)(6 * scale);

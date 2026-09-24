@@ -27,6 +27,8 @@
         </Grid>
 
         <CheckBox x:Name="OverlayBox" Margin="0,16,0,0" Click="Overlay_Click"/>
+        <TextBlock x:Name="OverlayHint" Margin="24,4,0,0" Opacity="0.7" TextWrapping="Wrap"/>
+        <Button x:Name="UnpinButton" Margin="24,6,0,0" HorizontalAlignment="Left" Padding="12,4" Click="Unpin_Click"/>
         <CheckBox x:Name="AutostartBox" Margin="0,8,0,0" Click="Autostart_Click"/>
         <CheckBox x:Name="KeepBox" Margin="0,8,0,0" Click="Keep_Click"/>
 

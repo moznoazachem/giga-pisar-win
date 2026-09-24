@@ -3,9 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         Topmost="True" ShowInTaskbar="False" ShowActivated="False" Focusable="False"
-        ResizeMode="NoResize" SizeToContent="Manual" Width="120" Height="58" IsHitTestVisible="False">
+        ResizeMode="NoResize" SizeToContent="Manual" Width="120" Height="58">
     <Border x:Name="Pill" CornerRadius="15" Height="30" Width="92" Margin="14"
-            HorizontalAlignment="Center" VerticalAlignment="Center"
+            HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="SizeAll"
             Background="#F5FFFFFF" BorderBrush="#1F000000" BorderThickness="1"
             RenderTransformOrigin="0.5,0.5">
         <Border.RenderTransform>
