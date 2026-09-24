@@ -21,6 +21,15 @@ public sealed class Recorder : IDisposable
     private float _levelSinceRead;
     private float _takePeak;
     private bool _capHit;
+    private double _noiseDb = double.NaN;
+    private double _peakDb = double.NaN;
+
+    /// <summary>The display meter adapts to the input: it tracks the noise floor and the loudest
+    /// recent buffer and stretches the bars between them, so a quiet line-level receiver and a hot
+    /// USB microphone both fill the wave. Recognition uses its own gain; this is display only.</summary>
+    private const double MeterMinSpanDb = 15;    // never stretch a span narrower than this
+    private const double MeterFloorRiseDb = 0.2; // noise floor creeps up this much per 40 ms buffer (5 dB/s)
+    private const double MeterPeakFallDb = 0.4;  // ceiling falls this much per buffer (10 dB/s)
 
     /// <summary>Loudness of the buffers since the last read, 0..1, shaped for a VU-style display.</summary>
     public float Level
@@ -50,7 +59,7 @@ public sealed class Recorder : IDisposable
 
     public Task StartAsync()
     {
-        lock (_gate) { _samples.Clear(); _levelSinceRead = 0; _takePeak = 0; _capHit = false; }
+        lock (_gate) { _samples.Clear(); _levelSinceRead = 0; _takePeak = 0; _capHit = false; _noiseDb = double.NaN; _peakDb = double.NaN; }
         var stopped = new ManualResetEventSlim(false);
         _stopped = stopped;
         IsRecording = true;
@@ -117,8 +126,12 @@ public sealed class Recorder : IDisposable
             if (n > 0)
             {
                 double rms = Math.Sqrt(sum / n);
-                double db = 20 * Math.Log10(Math.Max(rms, 1e-6));
-                float level = (float)Math.Clamp((db + 50) / 45, 0, 1);   // -50 dB silence … -5 dB loud
+                double db = 20 * Math.Log10(Math.Max(rms, 1e-7));
+                if (double.IsNaN(_noiseDb)) { _noiseDb = db; _peakDb = db + MeterMinSpanDb; }
+                _noiseDb = Math.Min(db, _noiseDb + MeterFloorRiseDb);   // floor: drops at once, rises slowly
+                _peakDb = Math.Max(db, _peakDb - MeterPeakFallDb);      // ceiling: rises at once, falls slowly
+                double span = Math.Max(_peakDb - _noiseDb, MeterMinSpanDb);
+                float level = (float)Math.Clamp((db - _noiseDb) / span, 0, 1);
                 _levelSinceRead = Math.Max(_levelSinceRead, level);
             }
             if (!_capHit && _samples.Count >= MaxTake.TotalSeconds * SampleRate) { _capHit = true; hitCap = true; }
