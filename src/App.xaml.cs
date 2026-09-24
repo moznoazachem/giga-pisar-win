@@ -46,6 +46,8 @@ public partial class PisarApp : Application
     {
         if (args.Length >= 3 && args[0] == "--transcribe")
             return CliTranscribe(args[1], args[2]);
+        if (args.Length >= 1 && args[0] == "--overlay-demo")
+            return OverlayDemo();
 
         _instanceMutex = new Mutex(true, "GigaPisar.SingleInstance", out bool first);
         if (!first) return 0;
@@ -66,6 +68,26 @@ public partial class PisarApp : Application
         var info = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
         int plus = info.IndexOf('+');
         return plus > 0 ? info[..plus] : info;
+    }
+
+    /// <summary>Design aid: shows the overlay with synthetic levels for a few seconds, then the "recognizing" state.</summary>
+    private static int OverlayDemo()
+    {
+        var app = new PisarApp();
+        app.InitializeComponent();
+        app.Startup += async (_, _) =>
+        {
+            L.Apply(UiLanguage.Russian);
+            var overlay = new OverlayWindow();
+            overlay.ShowListening(null, demo: true);
+            await Task.Delay(6000);
+            overlay.ShowRecognizing();
+            await Task.Delay(3000);
+            overlay.ShowHint(L.T("Тишина на входе. Проверьте микрофон", "Silence on input. Check the microphone"));
+            await Task.Delay(3000);
+            app.Shutdown();
+        };
+        return app.Run();
     }
 
     /// <summary>Headless mode for testing: recognize a WAV file, write the text to a file.</summary>
