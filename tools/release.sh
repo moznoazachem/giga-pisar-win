@@ -13,6 +13,7 @@ git diff --quiet || { echo "commit your changes first"; exit 1; }
 
 ./build.sh
 source build.local
+mkdir -p dist
 scp -q -i "$BUILD_KEY" "$BUILD_HOST:${BUILD_DIR//\\//}/dist/GigaPisar-Setup.exe" dist/GigaPisar-Setup.exe
 SHA=$(shasum -a 256 dist/GigaPisar-Setup.exe | cut -d' ' -f1)
 SIZE=$(stat -f %z dist/GigaPisar-Setup.exe)
