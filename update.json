@@ -1,0 +1,8 @@
+{
+  "version": "1.0.1",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.1/GigaPisar-Setup.exe",
+  "sha256": "d037ae9c47a4001bc3f54d72a4e81e5809a5e32225edaeaff84a075c3adb0a02",
+  "size": 54832184,
+  "notes": "Автообновление: Писарь сам находит новые версии, скачивает и ставит их. Плашка с волной в стиле Windows 11, её можно перетаскивать. Волна работает и с тихими микрофонами.",
+  "notes_en": "In-app updates: Pisar finds, downloads and installs new versions by itself. Windows 11 style wave pill that can be dragged. The wave now works with quiet microphones too."
+}
