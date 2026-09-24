@@ -266,6 +266,7 @@ public partial class PisarApp : Application
 
             string text = "";
             bool cleanupFailed = false;
+            bool cleanupReturnedEmpty = false;
             if (!silent && samples.Length > MinTakeSamples)
             {
                 if (_settings.KeepLastRecording)
@@ -285,6 +286,7 @@ public partial class PisarApp : Application
                     {
                         text = await SpeechCleanup.CleanAsync(text, _settings.CleanupEndpointUrl,
                             _settings.CleanupApiKey, _settings.CleanupModel, _settings.CleanupPrompt, _lifetime.Token);
+                        cleanupReturnedEmpty = text.Length == 0;
                     }
                     catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
                     catch (Exception ex)
@@ -307,7 +309,7 @@ public partial class PisarApp : Application
                     Hint(L.T("Сервер очистки недоступен. Вставлен исходный текст.",
                         "Cleanup server unavailable. Original text inserted."));
             }
-            else if (samples.Length <= MinTakeSamples)
+            else if (samples.Length <= MinTakeSamples || cleanupReturnedEmpty)
             {
                 overlay?.HideNow();
             }
