@@ -5,7 +5,7 @@ Push-to-talk Russian dictation for Windows 10/11, powered by Sber's open
 on the CPU, offline; no audio ever leaves the machine.
 
 Hold the dictation key (right Ctrl by default; right Alt, right Shift, Caps
-Lock, Scroll Lock or Insert can be chosen in Settings), speak, release: the
+Lock, Scroll Lock, Insert, or left Ctrl + Win can be chosen in Settings), speak, release: the
 text lands where the caret is. By default it is inserted through the clipboard
 (Ctrl+V, previous clipboard content restored, nothing goes into Clipboard
 History or the cloud clipboard); "type like a keyboard" is available as an
@@ -17,12 +17,19 @@ alternative in Settings.
   other apps do. It compares every key event with the configured key and
   swallows only that key; nothing is stored or logged.
 - Captures the default microphone only while the key is held.
+- Optionally sends recognized text to an OpenAI-compatible self-hosted endpoint
+  for cleanup before insertion. Audio stays on the machine. Configure the API
+  base URL (for example `http://127.0.0.1:12345/v1`), optional API key, and
+  model and cleanup prompt in Settings → Speech cleanup. You can refresh the
+  model list from the server or enter a model ID manually. The request uses `/chat/completions`.
+  If cleanup fails, the original recognized text is inserted.
 - Downloads the model once (about 200 MB) from the
   [giga-pisar-cli](https://github.com/moznoazachem/giga-pisar-cli) releases
   into `%LOCALAPPDATA%\GigaPisar\model` and verifies each file's SHA-256.
 - Keeps settings in `%APPDATA%\GigaPisar\settings.json` and a small log
   (take lengths, levels, errors; never text or audio) in
   `%LOCALAPPDATA%\GigaPisar\pisar.log`.
+  A configured cleanup API key is stored in that settings file as plain text.
 - Optionally keeps the last take as `last.wav` in the same folder for
   troubleshooting (off by default; deleted when the option is turned off).
 - Starts with Windows if you left that box checked in the installer; the

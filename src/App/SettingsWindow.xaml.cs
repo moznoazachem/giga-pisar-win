@@ -64,6 +64,11 @@ public partial class SettingsWindow : Window
         UpdatesBox.Content = L.T("Проверять обновления и предлагать их", "Check for updates and offer them");
         UpdatesBox.IsChecked = _settings.CheckUpdates;
 
+        CleanupHeading.Text = L.T("Очистка распознанной речи", "Speech cleanup");
+        CleanupHint.Text = L.T("Необязательное исправление текста через ваш OpenAI-совместимый сервер.",
+            "Optional text correction through your OpenAI-compatible server.");
+        CleanupButton.Content = L.T("Настроить очистку…", "Configure cleanup…");
+
         AboutHeading.Text = L.T("О программе", "About");
         About.Text = L.T($"Версия {PisarApp.Version}. Распознавание идёт на вашем компьютере, звук никуда не отправляется. Модель лежит в {Settings.ModelDir}.",
                          $"Version {PisarApp.Version}. Recognition runs on your computer; audio never leaves it. The model lives in {Settings.ModelDir}.");
@@ -120,6 +125,11 @@ public partial class SettingsWindow : Window
         if (!_settings.KeepLastRecording)
             try { File.Delete(Settings.LastTakePath); } catch { }
         _apply();
+    }
+
+    private void Cleanup_Click(object sender, RoutedEventArgs e)
+    {
+        new CleanupSettingsWindow(_settings, _apply) { Owner = this }.ShowDialog();
     }
 
     private void Link_Click(object sender, RequestNavigateEventArgs e)
