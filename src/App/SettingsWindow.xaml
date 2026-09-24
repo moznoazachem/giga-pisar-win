@@ -31,6 +31,7 @@
         <Button x:Name="UnpinButton" Margin="24,6,0,0" HorizontalAlignment="Left" Padding="12,4" Click="Unpin_Click"/>
         <CheckBox x:Name="AutostartBox" Margin="0,8,0,0" Click="Autostart_Click"/>
         <CheckBox x:Name="KeepBox" Margin="0,8,0,0" Click="Keep_Click"/>
+        <CheckBox x:Name="UpdatesBox" Margin="0,8,0,0" Click="Updates_Click"/>
 
         <Separator Margin="0,18,0,12"/>
         <TextBlock x:Name="AboutHeading" FontSize="15" FontWeight="SemiBold"/>

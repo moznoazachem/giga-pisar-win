@@ -18,6 +18,7 @@ public partial class PisarApp : Application
     public const string RepoUrl = "https://github.com/moznoazachem/giga-pisar-win";
 
     private static Mutex? _instanceMutex;
+    private static bool JustUpdated;
 
     /// <summary>Peak below this (about -75 dBFS) is digital silence: nothing reached the input at all.</summary>
     private const float SilenceFloor = 0.0002f;
@@ -39,6 +40,8 @@ public partial class PisarApp : Application
     private readonly Recorder _recorder = new();
     private OverlayWindow? _overlay;
     private SettingsWindow? _settingsWindow;
+    private UpdateWindow? _updateWindow;
+    private readonly CancellationTokenSource _lifetime = new();
     private bool _busy;
 
     [STAThread]
@@ -48,6 +51,7 @@ public partial class PisarApp : Application
             return CliTranscribe(args[1], args[2]);
         if (args.Length >= 1 && args[0] == "--overlay-demo")
             return OverlayDemo();
+        JustUpdated = args.Length >= 1 && args[0] == "--updated";
 
         _instanceMutex = new Mutex(true, "GigaPisar.SingleInstance", out bool first);
         if (!first) return 0;
@@ -164,6 +168,13 @@ public partial class PisarApp : Application
         }
 
         SetStatus(null);
+        if (JustUpdated)
+        {
+            Updater.Cleanup();
+            _tray.ShowBalloonTip(6000, L.T($"Гига Писарь обновлён до {Version}", $"Giga Pisar updated to {Version}"),
+                L.T("Всё готово, можно диктовать.", "All set, dictate away."), Forms.ToolTipIcon.None);
+        }
+        _ = UpdateLoopAsync();
         if (!_settings.FirstRunDone)
         {
             _settings.FirstRunDone = true;
@@ -173,6 +184,41 @@ public partial class PisarApp : Application
                     $"Put the cursor in any text, hold {Settings.HotkeyTitle(_settings.HotkeyVk)} and speak. Release, and the text appears by itself."),
                 Forms.ToolTipIcon.None);
         }
+    }
+
+    // ── updates ──────────────────────────────────────────────────
+
+    private async Task UpdateLoopAsync()
+    {
+        try
+        {
+            await Task.Delay(Updater.FirstCheckDelay, _lifetime.Token);
+            while (!_lifetime.IsCancellationRequested)
+            {
+                if (_settings.CheckUpdates) await CheckForUpdatesAsync(silent: true);
+                await Task.Delay(Updater.CheckInterval, _lifetime.Token);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private async Task CheckForUpdatesAsync(bool silent)
+    {
+        if (_updateWindow != null) { _updateWindow.Activate(); return; }
+        UpdateInfo? info;
+        try { info = await Updater.CheckAsync(_lifetime.Token); }
+        catch (OperationCanceledException) { return; }
+        if (info == null)
+        {
+            if (!silent)
+                _tray?.ShowBalloonTip(4000, L.T("Гига Писарь", "Giga Pisar"),
+                    L.T($"У вас последняя версия, {Version}.", $"You have the latest version, {Version}."), Forms.ToolTipIcon.None);
+            return;
+        }
+        _updateWindow = new UpdateWindow(info, Quit);
+        _updateWindow.Closed += (_, _) => _updateWindow = null;
+        _updateWindow.Show();
+        _updateWindow.Activate();
     }
 
     // ── push-to-talk ─────────────────────────────────────────────
@@ -327,6 +373,7 @@ public partial class PisarApp : Application
         menu.Items.Add(language);
 
         menu.Items.Add(new Forms.ToolStripSeparator());
+        menu.Items.Add(L.T("Проверить обновления", "Check for updates"), null, (_, _) => _ = CheckForUpdatesAsync(silent: false));
         menu.Items.Add(L.T("Сайт проекта", "Project website"), null, (_, _) => Open(SiteUrl));
         menu.Items.Add(L.T("Исходный код", "Source code"), null, (_, _) => Open(RepoUrl));
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -381,6 +428,7 @@ public partial class PisarApp : Application
 
     private void Quit()
     {
+        _lifetime.Cancel();
         _hook?.Dispose();
         _recorder.Dispose();
         _overlay?.Close();

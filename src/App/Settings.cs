@@ -16,6 +16,7 @@ public sealed class Settings
     public bool KeepLastRecording { get; set; } = false;
     public bool FirstRunDone { get; set; } = false;
     public UiLanguage Language { get; set; } = UiLanguage.Auto;
+    public bool CheckUpdates { get; set; } = true;
 
     /// <summary>Where the user dragged the overlay to (screen pixels, window top-left); null means "follow the caret".</summary>
     public int? OverlayX { get; set; }

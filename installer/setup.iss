@@ -33,7 +33,7 @@ ShowLanguageDialog=auto
 DisableWelcomePage=no
 ArchitecturesAllowed=x64os
 ArchitecturesInstallIn64BitMode=x64os
-CloseApplications=yes
+CloseApplications=force
 RestartApplications=no
 MinVersion=10.0.17763
 
@@ -65,6 +65,8 @@ Name: "{group}\{cm:Uninstall}"; Filename: "{uninstallexe}"
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
+; Silent runs come from the in-app updater: relaunch without asking, with a "what changed" toast.
+Filename: "{app}\{#AppExe}"; Parameters: "--updated"; Flags: nowait; Check: WizardSilent
 
 [UninstallRun]
 Filename: "taskkill"; Parameters: "/im {#AppExe} /f"; Flags: runhidden; RunOnceId: "KillApp"

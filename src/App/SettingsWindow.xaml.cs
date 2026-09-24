@@ -61,6 +61,8 @@ public partial class SettingsWindow : Window
         UnpinButton.IsEnabled = _settings.OverlayX != null;
         AutostartBox.IsChecked = Autostart.IsEnabled();
         KeepBox.IsChecked = _settings.KeepLastRecording;
+        UpdatesBox.Content = L.T("Проверять обновления и предлагать их", "Check for updates and offer them");
+        UpdatesBox.IsChecked = _settings.CheckUpdates;
 
         AboutHeading.Text = L.T("О программе", "About");
         About.Text = L.T($"Версия {PisarApp.Version}. Распознавание идёт на вашем компьютере, звук никуда не отправляется. Модель лежит в {Settings.ModelDir}.",
@@ -99,6 +101,12 @@ public partial class SettingsWindow : Window
     }
 
     private void Autostart_Click(object sender, RoutedEventArgs e) => Autostart.Set(AutostartBox.IsChecked == true);
+
+    private void Updates_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.CheckUpdates = UpdatesBox.IsChecked == true;
+        _apply();
+    }
 
     private void Unpin_Click(object sender, RoutedEventArgs e)
     {

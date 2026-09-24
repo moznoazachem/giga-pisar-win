@@ -1,8 +1,8 @@
-bin/
-obj/
-dist/
-*.user
 .vs/
-*.wav
 *.log
+*.user
+*.wav
+bin/
 build.local
+dist/
+obj/
