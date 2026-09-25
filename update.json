@@ -1,8 +1,8 @@
 {
-  "version": "1.0.1",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.1/GigaPisar-Setup.exe",
-  "sha256": "d037ae9c47a4001bc3f54d72a4e81e5809a5e32225edaeaff84a075c3adb0a02",
-  "size": 54832184,
-  "notes": "Автообновление: Писарь сам находит новые версии, скачивает и ставит их. Плашка с волной в стиле Windows 11, её можно перетаскивать. Волна работает и с тихими микрофонами.",
-  "notes_en": "In-app updates: Pisar finds, downloads and installs new versions by itself. Windows 11 style wave pill that can be dragged. The wave now works with quiet microphones too."
+  "version": "1.0.2",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.2/GigaPisar-Setup.exe",
+  "sha256": "2c59646997439e77c9507218eb0dad13d29d01f87795325bc5bcc9dbf2a3eb80",
+  "size": 54987872,
+  "notes": "Исправлен запуск на Windows 10: не хватало библиотек Visual C++, теперь они идут в комплекте. Запасной путь захвата микрофона через WASAPI, если обычный не открывается. Понятные сообщения, если Windows не даёт доступ к микрофону или не видит устройств записи.",
+  "notes_en": "Fixed startup on Windows 10: the Visual C++ runtime is now bundled. WASAPI capture fallback when the classic path fails. Clear messages when Windows denies microphone access or sees no recording device."
 }
