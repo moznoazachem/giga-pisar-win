@@ -51,6 +51,8 @@ public partial class PisarApp : Application
             return CliTranscribe(args[1], args[2]);
         if (args.Length >= 1 && args[0] == "--overlay-demo")
             return OverlayDemo();
+        if (args.Length >= 2 && args[0] == "--mic-test")
+            return MicTest(args[1]);
         JustUpdated = args.Length >= 1 && args[0] == "--updated";
 
         _instanceMutex = new Mutex(true, "GigaPisar.SingleInstance", out bool first);
@@ -72,6 +74,25 @@ public partial class PisarApp : Application
         var info = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "0.0.0";
         int plus = info.IndexOf('+');
         return plus > 0 ? info[..plus] : info;
+    }
+
+    /// <summary>Diagnostics: records two seconds from the default microphone and writes backend, sample count and peak to a file.</summary>
+    private static int MicTest(string outPath)
+    {
+        try
+        {
+            var rec = new Recorder();
+            rec.StartAsync().GetAwaiter().GetResult();
+            Thread.Sleep(2000);
+            var samples = rec.StopAsync().GetAwaiter().GetResult();
+            File.WriteAllText(outPath, $"backend={rec.Backend} devices={Recorder.DeviceCount} default={Recorder.DefaultDeviceName()} samples={samples.Length} seconds={samples.Length / (double)Recorder.SampleRate:F2} peak={20 * Math.Log10(Math.Max(rec.TakePeak, 1e-9)):F0}dBFS\n");
+            return 0;
+        }
+        catch (Exception e)
+        {
+            File.WriteAllText(outPath, "ERROR: " + e);
+            return 1;
+        }
     }
 
     /// <summary>Design aid: shows the overlay with synthetic levels for a few seconds, then the "recognizing" state.</summary>
@@ -149,7 +170,11 @@ public partial class PisarApp : Application
         catch (Exception ex)
         {
             Log.Write($"model load failed: {ex}");
-            MessageBox.Show(L.T("Не удалось загрузить модель распознавания.", "Could not load the speech model.") + "\n\n" + ex.Message,
+            string why = ex.ToString().Contains("NativeMethods", StringComparison.Ordinal) || ex is DllNotFoundException
+                ? L.T("Не загрузилась библиотека распознавания ONNX Runtime. Обычно это значит, что в Windows нет библиотек Visual C++. Поставьте их с сайта Microsoft (aka.ms/vs/17/release/vc_redist.x64.exe) и запустите Писаря снова.",
+                      "The ONNX Runtime library did not load. Usually Windows is missing the Visual C++ runtime. Install it from Microsoft (aka.ms/vs/17/release/vc_redist.x64.exe) and start Pisar again.")
+                : ex.Message;
+            MessageBox.Show(L.T("Не удалось загрузить модель распознавания.", "Could not load the speech model.") + "\n\n" + why,
                 L.T("Гига Писарь", "Giga Pisar"), MessageBoxButton.OK, MessageBoxImage.Error);
             Quit();
             return;
@@ -232,11 +257,15 @@ public partial class PisarApp : Application
         }
         catch (Exception ex)
         {
-            Log.Write($"mic failed: {ex.Message}");
-            _tray?.ShowBalloonTip(5000, L.T("Микрофон недоступен", "Microphone unavailable"),
-                L.T("Проверьте, что микрофон подключён и разрешён в Параметрах, раздел Конфиденциальность, Микрофон.",
-                    "Check that a microphone is connected and allowed in Settings, Privacy, Microphone."),
-                Forms.ToolTipIcon.Warning);
+            Log.Write($"mic failed: {ex.GetType().Name}: {ex.Message} (devices: {Recorder.DeviceCount})");
+            string why = Recorder.DeviceCount == 0
+                ? L.T("Windows не видит ни одного устройства записи. Подключите микрофон или включите его в Параметрах звука, раздел «Ввод».",
+                      "Windows sees no recording device. Connect a microphone or enable one in Sound settings, Input.")
+                : ex is UnauthorizedAccessException || ex.Message.Contains("0x80070005") || ex.Message.Contains("denied", StringComparison.OrdinalIgnoreCase)
+                ? L.T("Windows не даёт доступ к микрофону. Параметры → Конфиденциальность и защита → Микрофон: включите «Доступ к микрофону» и «Разрешить классическим приложениям доступ к микрофону».",
+                      "Windows denies microphone access. Settings, Privacy and security, Microphone: turn on microphone access and let desktop apps use the microphone.")
+                : L.T($"Не удалось открыть микрофон: {ex.Message}", $"Could not open the microphone: {ex.Message}");
+            _tray?.ShowBalloonTip(8000, L.T("Микрофон недоступен", "Microphone unavailable"), why, Forms.ToolTipIcon.Warning);
             return;
         }
         if (_tray != null) _tray.Icon = _iconBusy;

@@ -13,7 +13,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <StartupObject>GigaPisar.App.PisarApp</StartupObject>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Product>Giga Pisar</Product>
     <Company>Giga Pisar</Company>
     <Copyright>MIT License</Copyright>
