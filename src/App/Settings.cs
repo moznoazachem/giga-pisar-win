@@ -9,6 +9,8 @@ public enum InsertMode { Type, Paste }
 
 public sealed class Settings
 {
+    public const int LeftCtrlWinHotkey = 0x10000;
+
     /// <summary>Virtual-key code of the push-to-talk key. Default: right Ctrl.</summary>
     public int HotkeyVk { get; set; } = 0xA3;
     public InsertMode InsertMode { get; set; } = InsertMode.Paste;
@@ -17,6 +19,11 @@ public sealed class Settings
     public bool FirstRunDone { get; set; } = false;
     public UiLanguage Language { get; set; } = UiLanguage.Auto;
     public bool CheckUpdates { get; set; } = true;
+    public bool CleanupEnabled { get; set; }
+    public string CleanupEndpointUrl { get; set; } = "";
+    public string CleanupApiKey { get; set; } = "";
+    public string CleanupModel { get; set; } = "";
+    public string CleanupPrompt { get; set; } = SpeechCleanup.DefaultPrompt;
 
     /// <summary>Where the user dragged the overlay to (screen pixels, window top-left); null means "follow the caret".</summary>
     public int? OverlayX { get; set; }
@@ -61,6 +68,7 @@ public sealed class Settings
     public static readonly (int vk, string ru, string en)[] HotkeyChoices =
     {
         (0xA3, "Правый Ctrl", "Right Ctrl"),
+        (LeftCtrlWinHotkey, "Левый Ctrl + Win", "Left Ctrl + Win"),
         (0xA5, "Правый Alt", "Right Alt"),
         (0xA1, "Правый Shift", "Right Shift"),
         (0x14, "Caps Lock", "Caps Lock"),
