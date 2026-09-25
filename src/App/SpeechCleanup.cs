@@ -54,6 +54,7 @@ public static class SpeechCleanup
         request.Content = JsonContent.Create(new
         {
             model,
+            reasoning_effort = "none",
             messages = new[]
             {
                 new { role = "system", content = prompt },
