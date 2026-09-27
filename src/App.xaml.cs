@@ -47,6 +47,16 @@ public partial class PisarApp : Application
     private UpdateWindow? _updateWindow;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _busy;
+    /// <summary>Text selected when the key went down (read in the background); a take with a selection is a command on it.</summary>
+    private Task<string?>? _selectionAtPress;
+
+    /// <summary>The Brain can work right now: chosen, and set up (downloaded or configured).</summary>
+    private bool BrainUsable => _settings.Brain switch
+    {
+        BrainSource.Local => LocalBrain.Downloaded,
+        BrainSource.Server => Brain.ServerConfigured(_settings),
+        _ => false,
+    };
 
     [STAThread]
     public static int Main(string[] args)
@@ -61,6 +71,13 @@ public partial class PisarApp : Application
             return BrainTest(args[1], args[2]);
         if (args.Length >= 2 && args[0] == "--brain-download")
             return BrainDownload(args[1]);
+        if (args.Length >= 2 && args[0] == "--selection-test")
+        {
+            // Diagnostics: what UI Automation reports as selected in the foreground app.
+            var sel = SelectionReader.TryGetAsync().GetAwaiter().GetResult();
+            File.WriteAllText(args[1], sel == null ? "(no selection)\n" : $"{sel.Length} chars:\n{sel}\n");
+            return 0;
+        }
         if (args.Length >= 3 && args[0] == "--shot")
             return WindowShot(args[1], args[2], args.Length >= 4 ? args[3] : "ru", args.Length >= 5 ? args[4] : null);
         if (args.Length >= 2 && args[0] == "--settings-shot")
@@ -406,6 +423,7 @@ public partial class PisarApp : Application
     private async Task HandlePressAsync()
     {
         if (_busy || _recognizer == null || _recorder.IsRecording) return;
+        _selectionAtPress = BrainUsable ? SelectionReader.TryGetAsync() : null;
         try
         {
             await _recorder.StartAsync();
@@ -464,8 +482,35 @@ public partial class PisarApp : Application
                     for (int i = 0; i < samples.Length; i++) samples[i] *= gain;
                 }
                 text = await Task.Run(() => _recognizer!.Transcribe(samples, Recorder.SampleRate));
-                if (text.Length > 0 && _settings.Brain != BrainSource.Off
-                    && (_settings.Brain != BrainSource.Server || Brain.ServerConfigured(_settings)))
+                string? selected = _selectionAtPress != null && text.Length > 0 ? await _selectionAtPress : null;
+                _selectionAtPress = null;
+                if (selected != null)
+                {
+                    // Selected text + speech = a command on the selection ("make it shorter", "translate").
+                    // The answer is pasted over the selection; Ctrl+Z in the app brings the original back.
+                    string command = Brain.StripAddress(text);
+                    Log.Write($"brain on selection, {selected.Length} chars");
+                    try
+                    {
+                        if (!await ConfirmBrainMemoryAsync()) throw new BrainException(
+                            L.T("мало свободной памяти, запуск отменён", "not enough free memory, start cancelled"));
+                        text = await Brain.TransformAsync(_settings, selected, command,
+                            status => { overlay?.ShowStatus(status); SetStatus(status); }, _lifetime.Token, selection: true);
+                    }
+                    catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
+                    catch (Exception ex)
+                    {
+                        Log.Write($"brain on selection failed: {ex.GetType().Name}: {ex.Message}");
+                        string why = ex is BrainException ? ex.Message
+                            : _settings.Brain == BrainSource.Server ? L.T("сервер не ответил", "the server did not answer")
+                            : L.T("нейронка не ответила", "the Brain did not answer");
+                        Hint(L.T($"Мозг не справился: {why}. Выделенный текст не тронут.",
+                                 $"The Brain failed: {why}. The selection is untouched."));
+                        return;   // never paste the spoken command over the user's text
+                    }
+                    finally { SetStatus(null); }
+                }
+                else if (text.Length > 0 && BrainUsable)
                 {
                     var cmd = Brain.ParseCommand(text);
                     if (cmd != null || _settings.BrainEveryTake)

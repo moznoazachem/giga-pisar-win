@@ -30,6 +30,16 @@ public static partial class Brain
         "дана в конце этой инструкции, в сам текст не входит, и упоминать её " +
         "в ответе нельзя. Верни ТОЛЬКО готовый текст, без кавычек вокруг него.";
 
+    /// <summary>For commands on a selection: the text is already written, touch only what the command asks.</summary>
+    private const string SelectionPrompt =
+        "Ты редактируешь текст, который пользователь выделил в своём документе, " +
+        "и выполняешь над ним команду пользователя. Сохраняй смысл и разбиение " +
+        "на абзацы, ничего не добавляй от себя и не комментируй. Тон и стиль " +
+        "сохраняй, если только команда не велит их изменить: команда важнее. " +
+        "Команда дана в конце этой инструкции, в сам текст не входит, и " +
+        "упоминать её в ответе нельзя. Верни ТОЛЬКО готовый текст, без кавычек " +
+        "вокруг него.";
+
     /// <summary>Recognition may hear "песарь" or "писарь" with various endings; "Гига" is optional.</summary>
     [GeneratedRegex(@"(?:гига[\s,—-]+)?п[еиэ]сар[ьяюе]?\b[\s,.:!—-]*", RegexOptions.IgnoreCase)]
     private static partial Regex AddressRegex();
@@ -46,6 +56,12 @@ public static partial class Brain
         if (command.Length == 0 || body.Length == 0) return null;
         return (body, command.TrimEnd('.', '!'));
     }
+
+    [GeneratedRegex(@"^\s*(?:гига[\s,—-]+)?п[еиэ]сар[ьяюе]?\b[\s,.:!—-]*", RegexOptions.IgnoreCase)]
+    private static partial Regex LeadingAddressRegex();
+
+    /// <summary>"Писарь, сделай короче" -> "сделай короче": the address before a command on a selection is optional.</summary>
+    public static string StripAddress(string text) => LeadingAddressRegex().Replace(text, "").Trim().TrimEnd('.', '!');
 
     /// <summary>What the pill says while the model works.</summary>
     public static string ActionLabel(string? command)
@@ -66,9 +82,10 @@ public static partial class Brain
     /// Throws BrainException (with a human reason) or HttpRequestException on failure.
     /// </summary>
     public static async Task<string> TransformAsync(Settings s, string body, string? command,
-        Action<string> status, CancellationToken ct)
+        Action<string> status, CancellationToken ct, bool selection = false)
     {
-        string prompt = command == null ? s.EffectiveCleanupPrompt : CommandPrompt + "\n\nКоманда пользователя к тексту: " + command + ".";
+        string prompt = command == null ? s.EffectiveCleanupPrompt
+            : (selection ? SelectionPrompt : CommandPrompt) + "\n\nКоманда пользователя к тексту: " + command + ".";
         string action = ActionLabel(command);
 
         if (s.Brain == BrainSource.Local)
