@@ -19,6 +19,12 @@ namespace GigaPisar.App;
 
 public static class LocalBrain
 {
+    /// <summary>
+    /// Whether "on this computer" is offered in the menus. Off until its own release
+    /// (with the model mirror on GitHub); someone who already chose it keeps seeing it.
+    /// </summary>
+    public const bool Offered = false;
+
     public const string EngineTag = "b10701";
     private const string EngineUrl = "https://github.com/ggml-org/llama.cpp/releases/download/b10701/llama-b10701-bin-win-cpu-x64.zip";
     private const string EngineSha256 = "84ecf626a9893a7701a5883480b06fb91043ee9cb76de10c5aaeea43cfc7c680";

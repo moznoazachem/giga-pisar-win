@@ -1,4 +1,6 @@
-// Settings window. Every change is applied and saved immediately.
+// Settings window, laid out like Windows 11 Settings: sections on the left
+// (Dictation, Brain, About), the chosen section on the right. Every change is
+// applied and saved immediately, the server Brain included.
 
 using System.Diagnostics;
 using System.Windows;
@@ -14,6 +16,10 @@ public partial class SettingsWindow : Window
     private readonly Action _unpin;
     private readonly Func<BrainSource, Task> _selectBrain;
     private bool _loading = true;
+    /// <summary>Last open section, kept while Pisar runs.</summary>
+    private static int _lastPage;
+
+    public enum Page { Dictation, Brain, About }
 
     public SettingsWindow(Settings settings, Action apply, Action unpin, Func<BrainSource, Task> selectBrain)
     {
@@ -22,7 +28,21 @@ public partial class SettingsWindow : Window
         _unpin = unpin;
         _selectBrain = selectBrain;
         InitializeComponent();
+        ServerPanel.Saved += () => { UpdateBrainTexts(); _apply(); };
         Localize();
+        Nav.SelectedIndex = _lastPage;
+    }
+
+    public void ShowPage(Page page) => Nav.SelectedIndex = (int)page;
+
+    private void Nav_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (Nav.SelectedIndex < 0) { Nav.SelectedIndex = _lastPage; return; }
+        _lastPage = Nav.SelectedIndex;
+        DictationPage.Visibility = _lastPage == 0 ? Visibility.Visible : Visibility.Collapsed;
+        BrainPage.Visibility = _lastPage == 1 ? Visibility.Visible : Visibility.Collapsed;
+        AboutPage.Visibility = _lastPage == 2 ? Visibility.Visible : Visibility.Collapsed;
+        if (_lastPage == 1 && _settings.Brain == BrainSource.Server) ServerPanel.FocusKey();
     }
 
     /// <summary>Fills every text in the current UI language; called again when the language changes.</summary>
@@ -30,9 +50,12 @@ public partial class SettingsWindow : Window
     {
         _loading = true;
         Title = L.T("Гига Писарь: настройки", "Giga Pisar: settings");
+        NavDictation.Text = L.T("Диктовка", "Dictation");
+        NavBrain.Text = L.T("Мозг", "Brain");
+        NavAbout.Text = L.T("О программе", "About");
         Heading.Text = L.T("Диктовка", "Dictation");
-        Intro.Text = L.T("Поставьте курсор в любой текст, зажмите клавишу и говорите. Отпустите: текст появится сам.",
-                         "Put the cursor in any text, hold the key and speak. Release: the text appears by itself.");
+        Intro.Text = L.T("Курсор в любой текст, зажмите клавишу и говорите. Отпустите, и текст появится сам.",
+                         "Cursor in any text, hold the key and speak. Release and the text appears by itself.");
         HotkeyLabel.Text = L.T("Клавиша диктовки", "Dictation key");
         InsertLabel.Text = L.T("Как вставлять текст", "How to insert text");
         LanguageLabel.Text = L.T("Язык интерфейса", "Interface language");
@@ -57,9 +80,10 @@ public partial class SettingsWindow : Window
         AutostartBox.Content = L.T("Запускать при входе в Windows", "Start when I sign in to Windows");
         KeepBox.Content = L.T("Сохранять последнюю запись для разбора ошибок", "Keep the last recording for troubleshooting");
         OverlayBox.IsChecked = _settings.ShowOverlay;
-        OverlayHint.Text = L.T("Плашку можно перетащить мышью, пока она видна: она запомнит место.",
-                               "Drag the pill with the mouse while it is visible and it will stay there.");
-        UnpinButton.Content = L.T("Вернуть плашку к курсору", "Put the pill back at the caret");
+        OverlayBox.ToolTip = L.T("Плашку можно перетащить мышью, пока она видна: она запомнит место.",
+                                 "Drag the pill with the mouse while it is visible and it will stay there.");
+        UnpinButton.Content = L.T("Вернуть к курсору", "Back to the caret");
+        UnpinButton.ToolTip = L.T("Плашка снова будет появляться у курсора", "The pill follows the caret again");
         UnpinButton.IsEnabled = _settings.OverlayX != null;
         AutostartBox.IsChecked = Autostart.IsEnabled();
         KeepBox.IsChecked = _settings.KeepLastRecording;
@@ -67,45 +91,36 @@ public partial class SettingsWindow : Window
         UpdatesBox.IsChecked = _settings.CheckUpdates;
 
         CleanupHeading.Text = L.T("Мозг", "Brain");
-        CleanupHint.Text = L.T("Нейросеть правит надиктованное по команде. Скажите в конце фразы: «Писарь, исправь», «Писарь, сократи», «Писарь, сделай вежливее», «Писарь, переведи на английский». Без обращения текст вставляется сразу, как обычно.",
-                               "An AI model edits the dictated text on command. End a phrase with \"Pisar, fix it\", \"Pisar, make it shorter\" or \"Pisar, translate into English\" (said in Russian). Without the address the text is inserted at once, as usual.");
-        string host = SpeechCleanup.HostOf(_settings.CleanupEndpointUrl);
+        CleanupHint.Text = L.T("Нейросеть правит надиктованное по команде. Скажите в конце: «Писарь, исправь», «Писарь, сократи» или «Писарь, переведи на английский». Без обращения текст вставляется сразу.",
+                               "An AI model edits the dictation on command. End with \"Pisar, fix it\", \"Pisar, make it shorter\" or \"Pisar, translate into English\" (said in Russian). Without the address the text goes in at once.");
+        BrainLabel.Text = L.T("Где думает", "Runs on");
         BrainBox.Items.Clear();
         BrainBox.Items.Add(new ComboBoxItem { Content = L.T("Выключен", "Off"), Tag = BrainSource.Off });
-        BrainBox.Items.Add(new ComboBoxItem
-        {
-            Content = LocalBrain.Downloaded ? L.T($"На компьютере ({LocalBrain.ModelTitle})", $"On this computer ({LocalBrain.ModelTitle})")
-                                            : L.T("На компьютере (скачать 2 ГБ)", "On this computer (download 2 GB)"),
-            Tag = BrainSource.Local,
-        });
-        BrainBox.Items.Add(new ComboBoxItem
-        {
-            Content = host.Length > 0 ? L.T($"Свой сервер или облако ({host})", $"Own server or cloud ({host})")
-                                      : L.T("Свой сервер или облако", "Own server or cloud"),
-            Tag = BrainSource.Server,
-        });
-        BrainBox.SelectedIndex = (int)_settings.Brain;
-        BrainStatus.Text = _settings.Brain switch
-        {
-            BrainSource.Local => L.T("Работает без интернета. Занимает около 2,5 ГБ памяти, пока нужен, и выгружается через 15 минут без дела.",
-                                     "Works offline. Takes about 2.5 GB of memory while needed and unloads after 15 idle minutes."),
-            BrainSource.Server => L.T($"Текст (не звук) уходит на {host}. Распознавание остаётся на компьютере.",
-                                      $"Text (not audio) goes to {host}. Recognition stays on this computer."),
-            _ => L.T("Текст вставляется как распознан.", "Text is inserted as recognized."),
-        };
-        CleanupButton.Content = L.T("Настроить сервер…", "Set up the server…");
-        CleanupButton.Visibility = _settings.Brain == BrainSource.Server ? Visibility.Visible : Visibility.Collapsed;
-        DeleteBrainButton.Content = L.T("Удалить модель с компьютера", "Delete the model from this computer");
-        DeleteBrainButton.Visibility = LocalBrain.Downloaded && _settings.Brain != BrainSource.Local ? Visibility.Visible : Visibility.Collapsed;
+        if (LocalBrain.Offered || _settings.Brain == BrainSource.Local)
+            BrainBox.Items.Add(new ComboBoxItem
+            {
+                Content = LocalBrain.Downloaded ? L.T($"На компьютере ({LocalBrain.ModelTitle})", $"On this computer ({LocalBrain.ModelTitle})")
+                                                : L.T("На компьютере (скачать 2 ГБ)", "On this computer (download 2 GB)"),
+                Tag = BrainSource.Local,
+            });
+        BrainBox.Items.Add(new ComboBoxItem { Content = L.T("В облаке или на своём сервере", "In the cloud or on your server"), Tag = BrainSource.Server });
+        foreach (ComboBoxItem it in BrainBox.Items)
+            if ((BrainSource)it.Tag == _settings.Brain) BrainBox.SelectedItem = it;
+        ServerPanel.Bind(_settings, _apply);
+        DeleteBrainButton.Content = L.T("Удалить модель с компьютера (2 ГБ)", "Delete the model from this computer (2 GB)");
         EveryTakeBox.Content = L.T("Править каждую диктовку, без команды", "Edit every take, without a command");
         EveryTakeBox.IsChecked = _settings.BrainEveryTake;
-        EveryTakeBox.IsEnabled = _settings.Brain != BrainSource.Off;
-        EveryTakeHint.Text = L.T("Удобно с быстрым сервером. На компьютере без видеокарты каждая вставка будет ждать нейросеть несколько секунд.",
-                                 "Handy with a fast server. On a computer without a graphics card every insertion will wait a few seconds for the model.");
+        EveryTakeHint.Text = L.T("Удобно с быстрым облачным сервисом: нейросеть причёсывает всё подряд.",
+                                 "Handy with a fast cloud service: the model tidies up everything.");
+        PromptExpander.Header = L.T("Инструкция для этого режима", "Instructions for this mode");
+        PromptBox.Text = _settings.EffectiveCleanupPrompt;
+        UpdateBrainTexts();
 
         AboutHeading.Text = L.T("О программе", "About");
-        About.Text = L.T($"Версия {PisarApp.Version}. Распознавание идёт на вашем компьютере, звук никуда не отправляется. Модель лежит в {Settings.ModelDir}.",
-                         $"Version {PisarApp.Version}. Recognition runs on your computer; audio never leaves it. The model lives in {Settings.ModelDir}.");
+        About.Text = L.T($"Гига Писарь {PisarApp.Version}. Распознавание идёт на вашем компьютере моделью GigaAM от Сбера, звук никуда не отправляется.",
+                         $"Giga Pisar {PisarApp.Version}. Speech is recognized on your computer by Sber's GigaAM model; audio never leaves it.");
+        ModelPath.Text = L.T("Модель: ", "Model: ") + Settings.ModelDir;
+        CodeLink.Text = L.T("исходный код", "source code");
         MicLine.Text = L.T("Микрофон: ", "Microphone: ") + Recorder.DefaultDeviceName();
         ModelLink.Text = L.T("модель GigaAM от Сбера", "GigaAM model by Sber");
         LogLink.Text = L.T("Открыть папку с журналом", "Open the log folder");
@@ -161,19 +176,49 @@ public partial class SettingsWindow : Window
         _apply();
     }
 
+    /// <summary>Shows only what the chosen Brain needs: the server fields, the delete button, the every-take option.</summary>
+    private void UpdateBrainTexts()
+    {
+        var b = _settings.Brain;
+        BrainStatus.Text = b switch
+        {
+            BrainSource.Local => L.T("Работает без интернета. Пока нужен, занимает около 2,5 ГБ памяти, через 15 минут без дела выгружается.",
+                                     "Works offline. Takes about 2.5 GB of memory while needed, unloads after 15 idle minutes."),
+            BrainSource.Off => L.T("Текст вставляется как распознан.", "Text is inserted as recognized."),
+            _ => "",
+        };
+        BrainStatus.Visibility = BrainStatus.Text.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        ServerPanel.Visibility = b == BrainSource.Server ? Visibility.Visible : Visibility.Collapsed;
+        DeleteBrainButton.Visibility = LocalBrain.Downloaded && b != BrainSource.Local ? Visibility.Visible : Visibility.Collapsed;
+        var every = b == BrainSource.Off ? Visibility.Collapsed : Visibility.Visible;
+        EveryTakeBox.Visibility = every;
+        EveryTakeHint.Visibility = every;
+        PromptExpander.Visibility = b != BrainSource.Off && _settings.BrainEveryTake ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private async void Brain_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_loading || BrainBox.SelectedItem is not ComboBoxItem item) return;
         var source = (BrainSource)item.Tag;
         if (source == _settings.Brain) return;
         await _selectBrain(source);
-        Localize();   // the choice may have been cancelled (download declined, server not set up)
+        Localize();   // the choice may have been cancelled (download declined)
+        if (source == BrainSource.Server) ServerPanel.FocusKey();
+    }
+
+    private void Prompt_LostFocus(object sender, RoutedEventArgs e)
+    {
+        var prompt = PromptBox.Text.Trim();
+        // Our default (in any language) is stored as empty, so it keeps following the interface language.
+        _settings.CleanupPrompt = prompt.Length == 0 || SpeechCleanup.IsDefaultPrompt(prompt) ? "" : prompt;
+        _apply();
     }
 
     private void EveryTake_Click(object sender, RoutedEventArgs e)
     {
         _settings.BrainEveryTake = EveryTakeBox.IsChecked == true;
         _apply();
+        UpdateBrainTexts();
     }
 
     private void DeleteBrain_Click(object sender, RoutedEventArgs e)
@@ -182,14 +227,6 @@ public partial class SettingsWindow : Window
         Localize();
     }
 
-    private void Cleanup_Click(object sender, RoutedEventArgs e) => OpenServerSettings();
-
-    /// <summary>Server address, key and model; saving them switches the Brain to the server.</summary>
-    public void OpenServerSettings()
-    {
-        new CleanupSettingsWindow(_settings, _apply) { Owner = this }.ShowDialog();
-        Localize();
-    }
 
     private void Link_Click(object sender, RequestNavigateEventArgs e)
     {

@@ -162,14 +162,14 @@ public partial class PisarApp : Application
                 CleanupApiKey = keyFile != null && File.Exists(keyFile) ? File.ReadAllText(keyFile).Trim() : "sk-00000000000000000000000000000000",
                 CleanupModel = "deepseek-flash",
             };
-            Window w = kind == "server"
-                ? new CleanupSettingsWindow(s, () => { })
-                : new SettingsWindow(s, () => { }, () => { }, _ => Task.CompletedTask);
+            var sw = new SettingsWindow(s, () => { }, () => { }, _ => Task.CompletedTask);
+            sw.ShowPage(kind switch { "brain" or "server" => SettingsWindow.Page.Brain, "about" => SettingsWindow.Page.About, _ => SettingsWindow.Page.Dictation });
+            Window w = sw;
             w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             w.Topmost = true;
             w.Show();
             w.Activate();
-            await Task.Delay(kind == "server" ? 4000 : 1500);   // the server window loads the model list first
+            await Task.Delay(kind is "server" or "brain" ? 4000 : 1500);   // the server window loads the model list first
             var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
             if (Native.DwmGetWindowAttribute(hwnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out var r, System.Runtime.InteropServices.Marshal.SizeOf<Native.RECT>()) != 0)
                 Native.GetWindowRect(hwnd, out r);
@@ -464,7 +464,8 @@ public partial class PisarApp : Application
                     for (int i = 0; i < samples.Length; i++) samples[i] *= gain;
                 }
                 text = await Task.Run(() => _recognizer!.Transcribe(samples, Recorder.SampleRate));
-                if (text.Length > 0 && _settings.Brain != BrainSource.Off)
+                if (text.Length > 0 && _settings.Brain != BrainSource.Off
+                    && (_settings.Brain != BrainSource.Server || Brain.ServerConfigured(_settings)))
                 {
                     var cmd = Brain.ParseCommand(text);
                     if (cmd != null || _settings.BrainEveryTake)
@@ -553,8 +554,13 @@ public partial class PisarApp : Application
     {
         if (source == BrainSource.Server && !Brain.ServerConfigured(_settings))
         {
+            // Nothing to ask here: the service, key and model are filled in right in Settings.
+            if (_settings.Brain == BrainSource.Local) LocalBrain.Stop();
+            _settings.Brain = BrainSource.Server;
+            ApplySettings();
             ShowSettings();
-            _settingsWindow?.OpenServerSettings();
+            _settingsWindow?.ShowPage(SettingsWindow.Page.Brain);
+            _settingsWindow?.Localize();
             return;
         }
         if (source == BrainSource.Local && !LocalBrain.Downloaded)
@@ -640,7 +646,9 @@ public partial class PisarApp : Application
         brainOff.Click += (_, _) => _ = SelectBrainAsync(BrainSource.Off);
         brainLocal.Click += (_, _) => _ = SelectBrainAsync(BrainSource.Local);
         brainServer.Click += (_, _) => _ = SelectBrainAsync(BrainSource.Server);
-        brain.DropDownItems.AddRange(new Forms.ToolStripItem[] { brainOff, brainLocal, brainServer });
+        brain.DropDownItems.Add(brainOff);
+        if (LocalBrain.Offered || _settings.Brain == BrainSource.Local) brain.DropDownItems.Add(brainLocal);
+        brain.DropDownItems.Add(brainServer);
         menu.Items.Add(brain);
         var autostart = new Forms.ToolStripMenuItem(L.T("Запускать при входе в Windows", "Start when I sign in")) { CheckOnClick = true };
         autostart.Click += (_, _) => Autostart.Set(autostart.Checked);
@@ -677,9 +685,9 @@ public partial class PisarApp : Application
             brainLocal.Text = LocalBrain.Downloaded
                 ? L.T($"На компьютере ({LocalBrain.ModelTitle})", $"On this computer ({LocalBrain.ModelTitle})")
                 : L.T("На компьютере (скачать 2 ГБ)…", "On this computer (download 2 GB)…");
-            brainServer.Text = host.Length > 0
-                ? L.T($"Свой сервер ({host})", $"Own server ({host})")
-                : L.T("Свой сервер или облако…", "Own server or cloud…");
+            brainServer.Text = Brain.ServerConfigured(_settings)
+                ? L.T($"В облаке ({host})", $"In the cloud ({host})")
+                : L.T("В облаке или на своём сервере…", "In the cloud or on your server…");
             hint.Text = _recognizer == null ? L.T("Модель ещё не загружена", "Model not loaded yet")
                 : L.T($"Зажмите {Settings.HotkeyTitle(_settings.HotkeyVk)} и говорите", $"Hold {Settings.HotkeyTitle(_settings.HotkeyVk)} and speak");
         };
