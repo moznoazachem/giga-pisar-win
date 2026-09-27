@@ -1,4 +1,4 @@
-// Progress window for the one-time model download.
+// Progress window for one-time downloads: the speech model on first run, the local Brain on request.
 
 using System.Windows;
 
@@ -8,23 +8,35 @@ public partial class DownloadWindow : Window
 {
     private CancellationTokenSource? _cts;
     private TaskCompletionSource<bool>? _done;
-    private string _target = "";
+    private readonly Func<IProgress<ModelDownloader.Progress>, CancellationToken, Task> _work;
+    private readonly string _spaceNeeded;
 
-    public DownloadWindow()
+    /// <summary>The speech model download into targetDir.</summary>
+    public DownloadWindow(string targetDir)
+        : this(L.T("Скачиваю модель распознавания", "Downloading the speech model"),
+               L.T("Это делается один раз. Модель GigaAM от Сбера, около 300 МБ. После загрузки Писарь работает без интернета: звук никуда не отправляется.",
+                   "A one-time step. Sber's GigaAM model, about 300 MB. Afterwards Pisar works offline: audio never leaves your computer."),
+               (progress, ct) => ModelDownloader.DownloadAsync(targetDir, progress, ct),
+               L.T("1 ГБ", "1 GB"))
     {
+    }
+
+    public DownloadWindow(string heading, string intro, Func<IProgress<ModelDownloader.Progress>, CancellationToken, Task> work,
+        string? spaceNeeded = null)
+    {
+        _work = work;
+        _spaceNeeded = spaceNeeded ?? L.T("2,5 ГБ", "2.5 GB");
         InitializeComponent();
         Title = L.T("Гига Писарь", "Giga Pisar");
-        Heading.Text = L.T("Скачиваю модель распознавания", "Downloading the speech model");
-        Intro.Text = L.T("Это делается один раз. Модель GigaAM от Сбера, около 300 МБ. После загрузки Писарь работает без интернета: звук никуда не отправляется.",
-                         "A one-time step. Sber's GigaAM model, about 300 MB. Afterwards Pisar works offline: audio never leaves your computer.");
+        Heading.Text = heading;
+        Intro.Text = intro;
         RetryButton.Content = L.T("Повторить", "Retry");
         CancelButton.Content = L.T("Отмена", "Cancel");
     }
 
-    /// <summary>Shows the window, downloads into targetDir, returns true on success.</summary>
-    public Task<bool> RunAsync(string targetDir)
+    /// <summary>Shows the window, runs the download, returns true on success.</summary>
+    public Task<bool> RunAsync()
     {
-        _target = targetDir;
         _done = new TaskCompletionSource<bool>();
         Closed += (_, _) => _done.TrySetResult(false);
         Show();
@@ -55,11 +67,15 @@ public partial class DownloadWindow : Window
                     Bar.IsIndeterminate = true;
                     Status.Text = L.T("Распаковываю…", "Unpacking…");
                     break;
+                case "verify":
+                    Bar.IsIndeterminate = true;
+                    Status.Text = L.T("Проверяю файл…", "Checking the file…");
+                    break;
             }
         });
         try
         {
-            await ModelDownloader.DownloadAsync(_target, progress, _cts.Token);
+            await _work(progress, _cts.Token);
             _done?.TrySetResult(true);
             Close();
         }
@@ -75,8 +91,8 @@ public partial class DownloadWindow : Window
             var kind = (e as ModelDownloadException)?.Kind ?? DownloadFailure.Network;
             Status.Text = kind switch
             {
-                DownloadFailure.NoSpace => L.T("Мало места на диске: нужно около 1 ГБ свободных. Освободите место и повторите.",
-                                               "Not enough disk space: about 1 GB is needed. Free some space and retry."),
+                DownloadFailure.NoSpace => L.T($"Мало места на диске: нужно около {_spaceNeeded} свободных. Освободите место и повторите.",
+                                               $"Not enough disk space: about {_spaceNeeded} is needed. Free some space and retry."),
                 DownloadFailure.Corrupt => L.T("Скачанный архив повреждён или подменён. Попробуйте ещё раз позже.",
                                                "The downloaded archive is damaged or does not match. Try again later."),
                 _ => L.T("Не получилось скачать. Проверьте интернет и попробуйте ещё раз.",

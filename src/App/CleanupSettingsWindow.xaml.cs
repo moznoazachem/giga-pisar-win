@@ -17,11 +17,11 @@ public partial class CleanupSettingsWindow : Window
         Width = Math.Min(Width, MaxWidth);
         Height = Math.Min(Height, MaxHeight);
 
-        Title = L.T("Мозг", "Brain");
-        Heading.Text = L.T("Мозг: правка текста нейросетью", "Brain: AI text cleanup");
-        Intro.Text = L.T("Мозг убирает слова-паразиты, повторы и оговорки и расставляет знаки перед вставкой. Он работает на сервере, который вы укажете: своём или облачном, с OpenAI-совместимым API. Распознавание остаётся на компьютере, звук никуда не уходит, на сервер отправляется только готовый текст.",
-            "The Brain removes filler words, repeats and false starts and fixes punctuation before the text is inserted. It runs on a server you choose, your own or a cloud one, with an OpenAI-compatible API. Recognition stays on this computer and audio never leaves it; only the recognized text is sent.");
-        EnabledBox.Content = L.T("Включить Мозг", "Turn on the Brain");
+        Title = L.T("Мозг на сервере", "Brain on a server");
+        Heading.Text = L.T("Мозг на своём сервере или в облаке", "Brain on your server or in the cloud");
+        Intro.Text = L.T("Подойдёт любой сервис с OpenAI-совместимым API: OpenRouter, DeepSeek, OpenAI, свой сервер на LM Studio, Ollama или llama.cpp. Распознавание остаётся на компьютере, звук никуда не уходит, на сервер отправляется только готовый текст.",
+            "Any service with an OpenAI-compatible API works: OpenRouter, DeepSeek, OpenAI, or your own LM Studio, Ollama or llama.cpp server. Recognition stays on this computer and audio never leaves it; only the recognized text is sent.");
+        EnabledBox.Visibility = Visibility.Collapsed;   // saving the server switches the Brain to it
         UrlLabel.Text = L.T("Адрес сервера (URL)", "Endpoint URL");
         UrlHint.Text = L.T("Адрес OpenAI-совместимого API, например http://127.0.0.1:12345/v1. Путь /chat/completions добавляется автоматически.",
             "OpenAI-compatible API URL, such as http://127.0.0.1:12345/v1. /chat/completions is appended automatically.");
@@ -30,11 +30,10 @@ public partial class CleanupSettingsWindow : Window
             "Sent as a Bearer token. Stored encrypted in the settings file; only your Windows account can read it.");
         ModelLabel.Text = L.T("Модель", "Model");
         RefreshButton.Content = L.T("Обновить", "Refresh");
-        PromptLabel.Text = L.T("Инструкция для Мозга", "Instructions for the Brain");
+        PromptLabel.Text = L.T("Инструкция для режима «каждая диктовка»", "Instructions for \"edit every take\"");
         CancelButton.Content = L.T("Отмена", "Cancel");
         SaveButton.Content = L.T("Сохранить", "Save");
 
-        EnabledBox.IsChecked = settings.CleanupEnabled;
         UrlBox.Text = settings.CleanupEndpointUrl;
         KeyBox.Password = settings.CleanupApiKey;
         ModelBox.Text = settings.CleanupModel;
@@ -46,8 +45,7 @@ public partial class CleanupSettingsWindow : Window
         var endpoint = UrlBox.Text.Trim();
         var model = ModelBox.Text.Trim();
         var prompt = PromptBox.Text.Trim();
-        if (EnabledBox.IsChecked == true &&
-            (!SpeechCleanup.TryGetCompletionsUrl(endpoint, out _) || model.Length == 0 || prompt.Length == 0))
+        if (!SpeechCleanup.TryGetCompletionsUrl(endpoint, out _) || model.Length == 0 || prompt.Length == 0)
         {
             MessageBox.Show(this,
                 L.T("Укажите корректный HTTP(S) адрес сервера, модель и промпт.", "Enter a valid HTTP(S) endpoint URL, model, and prompt."),
@@ -55,14 +53,15 @@ public partial class CleanupSettingsWindow : Window
             return;
         }
 
-        if (EnabledBox.IsChecked == true && SpeechCleanup.IsInsecureRemote(endpoint) &&
+        if (SpeechCleanup.IsInsecureRemote(endpoint) &&
             MessageBox.Show(this,
                 L.T("Адрес начинается с http://, а сервер не на этом компьютере и не в домашней сети. Текст и ключ пойдут по интернету без шифрования. Лучше использовать https://. Всё равно сохранить?",
                     "The address starts with http:// and the server is neither on this computer nor on your home network. Text and key will cross the internet unencrypted. Prefer https://. Save anyway?"),
                 Title, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
             return;
 
-        _settings.CleanupEnabled = EnabledBox.IsChecked == true;
+        LocalBrain.Stop();
+        _settings.Brain = BrainSource.Server;
         _settings.CleanupEndpointUrl = endpoint;
         _settings.CleanupApiKey = KeyBox.Password;
         _settings.CleanupModel = model;

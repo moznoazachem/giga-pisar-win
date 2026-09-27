@@ -27,7 +27,9 @@ public static class SpeechCleanup
         Только очищенный текст. Без комментариев, пояснений, заголовков, вопросов и предложений. Если вход пустой или состоит только из мусора — вывод пустой.
         """;
 
-    private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(30) };
+    // Per-call deadlines instead of a client-wide timeout: a local model on a laptop needs longer than a cloud one.
+    private static readonly HttpClient Client = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// reasoning_effort is not part of every OpenAI-compatible API; some servers reject it with 400.
@@ -67,24 +69,28 @@ public static class SpeechCleanup
         return true;
     }
 
-    public static async Task<string> CleanAsync(string text, string endpoint, string apiKey, string model, string prompt, CancellationToken cancellationToken)
+    public static async Task<string> CleanAsync(string text, string endpoint, string apiKey, string model, string prompt,
+        CancellationToken outerToken, IDictionary<string, object>? extra = null, TimeSpan? timeout = null)
     {
         if (!TryGetCompletionsUrl(endpoint, out var url)) throw new ArgumentException("Invalid cleanup endpoint URL");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(outerToken);
+        deadline.CancelAfter(timeout ?? DefaultTimeout);
+        var cancellationToken = deadline.Token;
 
         bool withReasoning = _sendReasoningEffort;
-        using var response = await PostAsync(url!, apiKey, model, prompt, text, withReasoning, cancellationToken);
+        using var response = await PostAsync(url!, apiKey, model, prompt, text, withReasoning, extra, cancellationToken);
         if (withReasoning && response.StatusCode == HttpStatusCode.BadRequest)
         {
             Log.Write("cleanup server rejected reasoning_effort; retrying without it");
             _sendReasoningEffort = false;
-            using var retry = await PostAsync(url!, apiKey, model, prompt, text, false, cancellationToken);
+            using var retry = await PostAsync(url!, apiKey, model, prompt, text, false, extra, cancellationToken);
             return await ReadContentAsync(retry, cancellationToken);
         }
         return await ReadContentAsync(response, cancellationToken);
     }
 
     private static Task<HttpResponseMessage> PostAsync(Uri url, string apiKey, string model, string prompt, string text,
-        bool withReasoning, CancellationToken cancellationToken)
+        bool withReasoning, IDictionary<string, object>? extra, CancellationToken cancellationToken)
     {
         var body = new Dictionary<string, object>
         {
@@ -96,6 +102,7 @@ public static class SpeechCleanup
             },
         };
         if (withReasoning) body["reasoning_effort"] = "none";
+        if (extra != null) foreach (var (k, v) in extra) body[k] = v;
 
         // Serialized up front so the request carries Content-Length; some small self-hosted servers do not accept chunked bodies.
         var request = new HttpRequestMessage(HttpMethod.Post, url)
@@ -114,6 +121,9 @@ public static class SpeechCleanup
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         var cleaned = document.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
         if (cleaned == null) throw new InvalidDataException("Cleanup server returned no text");
+        // A model that still thought aloud: keep only the answer.
+        int think = cleaned.IndexOf("</think>", StringComparison.Ordinal);
+        if (think >= 0) cleaned = cleaned[(think + "</think>".Length)..];
         return cleaned.Trim();
     }
 

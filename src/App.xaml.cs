@@ -6,6 +6,7 @@
 
 using System.Diagnostics;
 using System.Reflection;
+using System.Text;
 using System.Windows;
 using Forms = System.Windows.Forms;
 
@@ -18,6 +19,9 @@ public partial class PisarApp : Application
     public const string RepoUrl = "https://github.com/moznoazachem/giga-pisar-win";
 
     private static Mutex? _instanceMutex;
+    /// <summary>A second launch (Start menu, desktop shortcut) signals the running instance to open Settings.</summary>
+    private static EventWaitHandle? _showSettingsSignal;
+    private const string ShowSettingsSignalName = "GigaPisar.ShowSettings";
     private static bool JustUpdated;
 
     /// <summary>Peak below this (about -75 dBFS) is digital silence: nothing reached the input at all.</summary>
@@ -55,10 +59,25 @@ public partial class PisarApp : Application
             return MicTest(args[1]);
         if (args.Length >= 3 && args[0] == "--brain-test")
             return BrainTest(args[1], args[2]);
+        if (args.Length >= 2 && args[0] == "--brain-download")
+            return BrainDownload(args[1]);
+        if (args.Length >= 2 && args[0] == "--settings-shot")
+            return SettingsShot(args[1], args.Length >= 3 ? args[2] : "ru");
         JustUpdated = args.Length >= 1 && args[0] == "--updated";
 
         _instanceMutex = new Mutex(true, "GigaPisar.SingleInstance", out bool first);
-        if (!first) return 0;
+        if (!first)
+        {
+            try
+            {
+                // We were started by the user and may take the foreground; pass that right on to the running instance.
+                Native.AllowSetForegroundWindow(Native.ASFW_ANY);
+                if (EventWaitHandle.TryOpenExisting(ShowSettingsSignalName, out var signal)) signal.Set();
+            }
+            catch { }
+            return 0;
+        }
+        _showSettingsSignal = new EventWaitHandle(false, EventResetMode.AutoReset, ShowSettingsSignalName);
 
         var app = new PisarApp();
         app.InitializeComponent();
@@ -105,9 +124,13 @@ public partial class PisarApp : Application
             var s = Settings.Load();
             s.Save();   // rewrites the file, so a plain-text key from the first Brain build gets encrypted
             var sw = Stopwatch.StartNew();
-            var cleaned = SpeechCleanup.CleanAsync(File.ReadAllText(inPath), s.CleanupEndpointUrl, s.CleanupApiKey,
-                s.CleanupModel, s.CleanupPrompt, CancellationToken.None).GetAwaiter().GetResult();
-            File.WriteAllText(outPath, $"server={SpeechCleanup.HostOf(s.CleanupEndpointUrl)} model={s.CleanupModel} key={(s.CleanupApiKey.Length > 0 ? "set" : "none")} ms={sw.ElapsedMilliseconds}\n{cleaned}\n");
+            var input = File.ReadAllText(inPath).Trim();
+            var cmd = Brain.ParseCommand(input);
+            var log = new StringBuilder();
+            var cleaned = Brain.TransformAsync(s, cmd?.body ?? input, cmd?.command,
+                status => log.Append($"[{sw.ElapsedMilliseconds} ms] {status}\n"), CancellationToken.None).GetAwaiter().GetResult();
+            File.WriteAllText(outPath, $"brain={s.Brain} server={SpeechCleanup.HostOf(s.CleanupEndpointUrl)} command={cmd?.command ?? "(every take)"} ms={sw.ElapsedMilliseconds}\n{log}{cleaned}\n");
+            LocalBrain.Stop();
             return 0;
         }
         catch (Exception e)
@@ -115,6 +138,67 @@ public partial class PisarApp : Application
             File.WriteAllText(outPath, "ERROR: " + e);
             return 1;
         }
+    }
+
+    /// <summary>Design aid: renders the Settings window into a PNG (works with the display asleep).</summary>
+    private static int SettingsShot(string outPath, string lang)
+    {
+        var app = new PisarApp();
+        app.InitializeComponent();
+        app.Startup += async (_, _) =>
+        {
+            L.Apply(lang == "en" ? UiLanguage.English : UiLanguage.Russian);
+            var s = Settings.Load();
+            var w = new SettingsWindow(s, () => { }, () => { }, _ => Task.CompletedTask);
+            w.Show();
+            await Task.Delay(1500);
+            var root = (FrameworkElement)w.Content;
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(root);
+            var bmp = new System.Windows.Media.Imaging.RenderTargetBitmap(
+                (int)Math.Ceiling(root.ActualWidth * dpi.DpiScaleX), (int)Math.Ceiling(root.ActualHeight * dpi.DpiScaleY),
+                96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, System.Windows.Media.PixelFormats.Pbgra32);
+            var bg = new System.Windows.Shapes.Rectangle { Width = root.ActualWidth, Height = root.ActualHeight, Fill = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x20, 0x20, 0x20)) };
+            bg.Measure(new Size(root.ActualWidth, root.ActualHeight)); bg.Arrange(new Rect(0, 0, root.ActualWidth, root.ActualHeight));
+            bmp.Render(bg);
+            bmp.Render(root);
+            var enc = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            enc.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using (var f = File.Create(outPath)) enc.Save(f);
+            app.Shutdown();
+        };
+        return app.Run();
+    }
+
+    /// <summary>Diagnostics: the local Brain download without the window, progress written to <paramref name="outPath"/>.</summary>
+    private static int BrainDownload(string outPath)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            int lastPercent = -1;
+            var progress = new SyncProgress(p =>
+            {
+                int pct = p.Total > 0 ? (int)(100 * p.Received / p.Total) : -1;
+                if (p.Stage != "download" || pct / 10 != lastPercent / 10)
+                {
+                    lastPercent = pct;
+                    File.AppendAllText(outPath, $"[{sw.Elapsed.TotalSeconds:F0}s] {p.Stage} {pct}%\n");
+                }
+            });
+            LocalBrain.DownloadAsync(progress, CancellationToken.None).GetAwaiter().GetResult();
+            File.AppendAllText(outPath, $"OK in {sw.Elapsed.TotalSeconds:F0}s, downloaded={LocalBrain.Downloaded}\n");
+            return 0;
+        }
+        catch (Exception e)
+        {
+            File.AppendAllText(outPath, "ERROR: " + e + "\n");
+            return 1;
+        }
+    }
+
+    private sealed class SyncProgress(Action<ModelDownloader.Progress> report) : IProgress<ModelDownloader.Progress>
+    {
+        public void Report(ModelDownloader.Progress value) => report(value);
     }
 
     /// <summary>Design aid: shows the overlay with synthetic levels for a few seconds, then the "recognizing" state.</summary>
@@ -177,10 +261,15 @@ public partial class PisarApp : Application
             ContextMenuStrip = BuildMenu(),
         };
         _tray.DoubleClick += (_, _) => ShowSettings();
+        new Thread(() =>
+        {
+            while (_showSettingsSignal!.WaitOne() && !_lifetime.IsCancellationRequested)
+                Dispatcher.BeginInvoke(ShowSettings);
+        }) { IsBackground = true, Name = "show-settings-signal" }.Start();
 
         if (!Core.Recognizer.ModelExists(Settings.ModelDir))
         {
-            var ok = await new DownloadWindow().RunAsync(Settings.ModelDir);
+            var ok = await new DownloadWindow(Settings.ModelDir).RunAsync();
             if (!ok) { Quit(); return; }
         }
 
@@ -316,7 +405,7 @@ public partial class PisarApp : Application
             Log.Write($"take {samples.Length / (double)Recorder.SampleRate:F1}s peak {20 * Math.Log10(Math.Max(peak, 1e-9)):F0} dBFS silent={silent}");
 
             string text = "";
-            bool cleanupFailed = false;
+            string? brainFailure = null;
             bool cleanupReturnedEmpty = false;
             if (!silent && samples.Length > MinTakeSamples)
             {
@@ -331,19 +420,32 @@ public partial class PisarApp : Application
                     for (int i = 0; i < samples.Length; i++) samples[i] *= gain;
                 }
                 text = await Task.Run(() => _recognizer!.Transcribe(samples, Recorder.SampleRate));
-                if (text.Length > 0 && _settings.CleanupEnabled)
+                if (text.Length > 0 && _settings.Brain != BrainSource.Off)
                 {
-                    try
+                    var cmd = Brain.ParseCommand(text);
+                    if (cmd != null || _settings.BrainEveryTake)
                     {
-                        text = await SpeechCleanup.CleanAsync(text, _settings.CleanupEndpointUrl,
-                            _settings.CleanupApiKey, _settings.CleanupModel, _settings.CleanupPrompt, _lifetime.Token);
-                        cleanupReturnedEmpty = text.Length == 0;
-                    }
-                    catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
-                    catch (Exception ex)
-                    {
-                        Log.Write($"speech cleanup failed: {ex.GetType().Name}: {ex.Message}");
-                        cleanupFailed = true;
+                        string body = cmd?.body ?? text;
+                        try
+                        {
+                            if (cmd != null) Log.Write($"brain command, {body.Length} chars");
+                            if (!await ConfirmBrainMemoryAsync()) throw new BrainException(
+                                L.T("мало свободной памяти, запуск отменён", "not enough free memory, start cancelled"));
+                            text = await Brain.TransformAsync(_settings, body, cmd?.command,
+                                status => { overlay?.ShowStatus(status); SetStatus(status); }, _lifetime.Token);
+                            cleanupReturnedEmpty = text.Length == 0;
+                        }
+                        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
+                        catch (Exception ex)
+                        {
+                            Log.Write($"brain failed: {ex.GetType().Name}: {ex.Message}");
+                            brainFailure = ex is BrainException ? ex.Message : null;
+                            brainFailure ??= _settings.Brain == BrainSource.Server
+                                ? L.T("сервер не ответил", "the server did not answer")
+                                : L.T("нейронка не ответила", "the Brain did not answer");
+                            text = body;   // the command itself is never inserted
+                        }
+                        finally { SetStatus(null); }
                     }
                 }
             }
@@ -356,9 +458,9 @@ public partial class PisarApp : Application
                 if (result == InsertResult.Blocked)
                     Hint(L.T("Это окно запущено от администратора, вставить туда нельзя. Текст лежит в буфере обмена.",
                              "That window runs as administrator; typing into it is blocked. The text is on the clipboard."));
-                else if (cleanupFailed)
-                    Hint(L.T("Мозг не ответил. Вставлен текст без правки.",
-                        "The Brain did not answer. Inserted the text as recognized."));
+                else if (brainFailure != null)
+                    Hint(L.T($"Мозг не справился: {brainFailure}. Вставлен текст без правки.",
+                             $"The Brain failed: {brainFailure}. Inserted the text as recognized."));
             }
             else if (samples.Length <= MinTakeSamples || cleanupReturnedEmpty)
             {
@@ -383,6 +485,62 @@ public partial class PisarApp : Application
             _busy = false;
             if (_tray != null) _tray.Icon = _iconIdle;
         }
+    }
+
+    /// <summary>
+    /// Before a cold start of the local Brain: if the model will not fit into free memory,
+    /// Windows starts paging and the start drags on for minutes. Better to ask first.
+    /// </summary>
+    private Task<bool> ConfirmBrainMemoryAsync()
+    {
+        if (_settings.Brain != BrainSource.Local || LocalBrain.Running) return Task.FromResult(true);
+        var (_, free) = LocalBrain.Memory();
+        ulong need = LocalBrain.MemoryNeeded;
+        if (free == 0 || free >= need) return Task.FromResult(true);
+        var answer = System.Windows.MessageBox.Show(
+            L.T($"Свободно {LocalBrain.Gb(free)} ГБ памяти, а Мозгу нужно около {LocalBrain.Gb(need)} ГБ. Он всё равно запустится, но Windows начнёт выгружать другие программы на диск, и ждать можно несколько минут. Закройте тяжёлые программы и попробуйте снова, или запускайте так.",
+                $"{LocalBrain.Gb(free)} GB of memory is free and the Brain needs about {LocalBrain.Gb(need)} GB. It will still start, but Windows will page other apps to disk and it may take minutes. Close heavy apps and try again, or go ahead anyway."),
+            L.T("Памяти впритык", "Memory is tight"), System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning);
+        return Task.FromResult(answer == System.Windows.MessageBoxResult.Yes);
+    }
+
+    /// <summary>Switches the Brain; for the local one, downloads engine and model first (asking before 2 GB).</summary>
+    public async Task SelectBrainAsync(BrainSource source)
+    {
+        if (source == BrainSource.Server && !Brain.ServerConfigured(_settings))
+        {
+            ShowSettings();
+            _settingsWindow?.OpenServerSettings();
+            return;
+        }
+        if (source == BrainSource.Local && !LocalBrain.Downloaded)
+        {
+            var (total, _) = LocalBrain.Memory();
+            string ram = total > 0 && total < LocalBrain.RecommendedRamBytes
+                ? L.T($"\n\nВ этом компьютере {LocalBrain.Gb(total)} ГБ памяти, а Мозгу комфортно от 8 ГБ. Работать будет, но медленно и тесно.",
+                      $"\n\nThis computer has {LocalBrain.Gb(total)} GB of memory; the Brain is comfortable from 8 GB. It will work, but slowly and tightly.")
+                : "";
+            var ok = System.Windows.MessageBox.Show(
+                L.T($"Мозг на компьютере: нейросеть {LocalBrain.ModelTitle} и движок llama.cpp, около 2 ГБ. Скачиваются один раз, потом всё работает без интернета.\n\nПока Мозг работает, он занимает около 2,5 ГБ памяти и сам выгружается через 15 минут без дела. Правка фразы на обычном ноутбуке занимает от нескольких секунд до десяти.{ram}\n\nСкачать?",
+                    $"The Brain on this computer: the {LocalBrain.ModelTitle} model and the llama.cpp engine, about 2 GB. Downloaded once, then everything works offline.\n\nWhile working it takes about 2.5 GB of memory and unloads itself after 15 idle minutes. Editing a phrase takes a few seconds up to ten on an ordinary laptop.{ram}\n\nDownload?"),
+                L.T("Мозг на компьютере", "Brain on this computer"), System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Question);
+            if (ok != System.Windows.MessageBoxResult.Yes) return;
+            var window = new DownloadWindow(
+                L.T("Скачиваю Мозг", "Downloading the Brain"),
+                L.T($"Нейросеть {LocalBrain.ModelTitle} и движок llama.cpp, около 2 ГБ. Если связь оборвётся, скачивание продолжится с того же места.",
+                    $"The {LocalBrain.ModelTitle} model and the llama.cpp engine, about 2 GB. If the connection drops, the download resumes where it stopped."),
+                LocalBrain.DownloadAsync);
+            if (!await window.RunAsync()) return;
+        }
+        if (source != BrainSource.Local) LocalBrain.Stop();
+        _settings.Brain = source;
+        ApplySettings();
+        _settingsWindow?.Localize();
+        if (source != BrainSource.Off)
+            _tray?.ShowBalloonTip(6000, L.T("Мозг включён", "Brain is on"),
+                L.T("Скажите в конце фразы: «Писарь, исправь», «Писарь, сократи» или «Писарь, переведи на английский».",
+                    "End a phrase with \"Pisar, fix it\", \"Pisar, make it shorter\" or \"Pisar, translate into English\" (in Russian)."),
+                Forms.ToolTipIcon.None);
     }
 
     /// <summary>Short feedback for the user: on the overlay when it is enabled, otherwise as a balloon.</summary>
@@ -430,19 +588,15 @@ public partial class PisarApp : Application
         menu.Items.Add(hint);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(L.T("Настройки…", "Settings…"), null, (_, _) => ShowSettings());
-        // Visible switch, so it is always clear whether text leaves the computer.
+        // Always visible, so it is clear whether text leaves the computer.
         var brain = new Forms.ToolStripMenuItem("");
-        brain.Click += (_, _) =>
-        {
-            if (string.IsNullOrWhiteSpace(_settings.CleanupEndpointUrl) || string.IsNullOrWhiteSpace(_settings.CleanupModel))
-            {
-                ShowSettings();
-                return;
-            }
-            _settings.CleanupEnabled = !_settings.CleanupEnabled;
-            ApplySettings();
-            _settingsWindow?.Localize();
-        };
+        var brainOff = new Forms.ToolStripMenuItem(L.T("Выключен", "Off"));
+        var brainLocal = new Forms.ToolStripMenuItem("");
+        var brainServer = new Forms.ToolStripMenuItem("");
+        brainOff.Click += (_, _) => _ = SelectBrainAsync(BrainSource.Off);
+        brainLocal.Click += (_, _) => _ = SelectBrainAsync(BrainSource.Local);
+        brainServer.Click += (_, _) => _ = SelectBrainAsync(BrainSource.Server);
+        brain.DropDownItems.AddRange(new Forms.ToolStripItem[] { brainOff, brainLocal, brainServer });
         menu.Items.Add(brain);
         var autostart = new Forms.ToolStripMenuItem(L.T("Запускать при входе в Windows", "Start when I sign in")) { CheckOnClick = true };
         autostart.Click += (_, _) => Autostart.Set(autostart.Checked);
@@ -466,10 +620,22 @@ public partial class PisarApp : Application
         menu.Opening += (_, _) =>
         {
             autostart.Checked = Autostart.IsEnabled();
-            brain.Checked = _settings.CleanupEnabled;
-            brain.Text = _settings.CleanupEnabled
-                ? L.T($"Мозг: {SpeechCleanup.HostOf(_settings.CleanupEndpointUrl)}", $"Brain: {SpeechCleanup.HostOf(_settings.CleanupEndpointUrl)}")
-                : L.T("Мозг выключен", "Brain off");
+            string host = SpeechCleanup.HostOf(_settings.CleanupEndpointUrl);
+            brain.Text = _settings.Brain switch
+            {
+                BrainSource.Local => L.T("Мозг: на компьютере", "Brain: on this computer"),
+                BrainSource.Server => L.T($"Мозг: {host}", $"Brain: {host}"),
+                _ => L.T("Мозг: выключен", "Brain: off"),
+            };
+            brainOff.Checked = _settings.Brain == BrainSource.Off;
+            brainLocal.Checked = _settings.Brain == BrainSource.Local;
+            brainServer.Checked = _settings.Brain == BrainSource.Server;
+            brainLocal.Text = LocalBrain.Downloaded
+                ? L.T($"На компьютере ({LocalBrain.ModelTitle})", $"On this computer ({LocalBrain.ModelTitle})")
+                : L.T("На компьютере (скачать 2 ГБ)…", "On this computer (download 2 GB)…");
+            brainServer.Text = host.Length > 0
+                ? L.T($"Свой сервер ({host})", $"Own server ({host})")
+                : L.T("Свой сервер или облако…", "Own server or cloud…");
             hint.Text = _recognizer == null ? L.T("Модель ещё не загружена", "Model not loaded yet")
                 : L.T($"Зажмите {Settings.HotkeyTitle(_settings.HotkeyVk)} и говорите", $"Hold {Settings.HotkeyTitle(_settings.HotkeyVk)} and speak");
         };
@@ -486,11 +652,15 @@ public partial class PisarApp : Application
     {
         if (_settingsWindow == null)
         {
-            _settingsWindow = new SettingsWindow(_settings, ApplySettings, () => { _overlay?.Unpin(); _settings.OverlayX = null; _settings.OverlayY = null; _settings.Save(); });
+            _settingsWindow = new SettingsWindow(_settings, ApplySettings, () => { _overlay?.Unpin(); _settings.OverlayX = null; _settings.OverlayY = null; _settings.Save(); }, SelectBrainAsync);
             _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         }
         _settingsWindow.Show();
+        if (_settingsWindow.WindowState == WindowState.Minimized) _settingsWindow.WindowState = WindowState.Normal;
+        // Windows may refuse the foreground to a tray app; a topmost blink still brings the window above the rest.
+        _settingsWindow.Topmost = true;
         _settingsWindow.Activate();
+        _settingsWindow.Topmost = false;
     }
 
     private void ApplySettings()
@@ -518,6 +688,7 @@ public partial class PisarApp : Application
     private void Quit()
     {
         _lifetime.Cancel();
+        LocalBrain.Stop();
         _hook?.Dispose();
         _recorder.Dispose();
         _overlay?.Close();

@@ -125,6 +125,22 @@ public partial class OverlayWindow : Window
     /// <summary>Shows a short message (e.g. "heard nothing") and hides after a moment.</summary>
     public async void ShowHint(string text)
     {
+        ShowText(text);
+        int mine = ++_hintSerial;
+        await Task.Delay(HintMs);
+        // A new take may have started meanwhile; only the latest hint may hide the pill.
+        if (mine == _hintSerial && _recorder == null && !_demo) Hide();
+    }
+
+    /// <summary>Shows a message that stays until the next state, e.g. "Starting the Brain… 12s".</summary>
+    public void ShowStatus(string text)
+    {
+        _hintSerial++;
+        ShowText(text);
+    }
+
+    private void ShowText(string text)
+    {
         _timer.Stop();
         _recorder = null;
         _busyRipple = false;
@@ -136,10 +152,6 @@ public partial class OverlayWindow : Window
         Resize(Math.Ceiling(Label.DesiredSize.Width));
         Place();
         Appear();
-        int mine = ++_hintSerial;
-        await Task.Delay(HintMs);
-        // A new take may have started meanwhile; only the latest hint may hide the pill.
-        if (mine == _hintSerial && _recorder == null && !_demo) Hide();
     }
 
     // ── dragging ─────────────────────────────────────────────────

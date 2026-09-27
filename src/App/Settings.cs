@@ -21,7 +21,19 @@ public sealed class Settings
     public bool FirstRunDone { get; set; } = false;
     public UiLanguage Language { get; set; } = UiLanguage.Auto;
     public bool CheckUpdates { get; set; } = true;
-    public bool CleanupEnabled { get; set; }
+    /// <summary>Where the Brain thinks; Off by default.</summary>
+    public BrainSource Brain { get; set; } = BrainSource.Off;
+    /// <summary>Send every take through the Brain, not only those ending with "Pisar, …".</summary>
+    public bool BrainEveryTake { get; set; }
+
+    /// <summary>Read-only migration from 1.0.3, where the server Brain had a single on/off switch and cleaned every take.</summary>
+    [JsonPropertyName("CleanupEnabled")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? LegacyCleanupEnabled
+    {
+        get => null;
+        set { if (value == true && Brain == BrainSource.Off) { Brain = BrainSource.Server; BrainEveryTake = true; } }
+    }
     public string CleanupEndpointUrl { get; set; } = "";
     /// <summary>Plain API key in memory only; on disk it lives in <see cref="CleanupApiKeyProtected"/>.</summary>
     [JsonIgnore]

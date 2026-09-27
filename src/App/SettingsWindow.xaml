@@ -36,7 +36,14 @@
         <Separator Margin="0,18,0,12"/>
         <TextBlock x:Name="CleanupHeading" FontSize="15" FontWeight="SemiBold"/>
         <TextBlock x:Name="CleanupHint" Margin="0,4,0,8" Opacity="0.8" TextWrapping="Wrap"/>
-        <Button x:Name="CleanupButton" HorizontalAlignment="Left" Padding="12,4" Click="Cleanup_Click"/>
+        <ComboBox x:Name="BrainBox" MinWidth="280" HorizontalAlignment="Left" SelectionChanged="Brain_Changed"/>
+        <TextBlock x:Name="BrainStatus" Margin="0,6,0,0" Opacity="0.7" TextWrapping="Wrap"/>
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+            <Button x:Name="CleanupButton" Padding="12,4" Click="Cleanup_Click"/>
+            <Button x:Name="DeleteBrainButton" Padding="12,4" Margin="8,0,0,0" Click="DeleteBrain_Click"/>
+        </StackPanel>
+        <CheckBox x:Name="EveryTakeBox" Margin="0,10,0,0" Click="EveryTake_Click"/>
+        <TextBlock x:Name="EveryTakeHint" Margin="24,2,0,0" Opacity="0.7" TextWrapping="Wrap"/>
 
         <Separator Margin="0,18,0,12"/>
         <TextBlock x:Name="AboutHeading" FontSize="15" FontWeight="SemiBold"/>

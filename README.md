@@ -17,15 +17,26 @@ alternative in Settings.
   other apps do. It compares every key event with the configured key and
   swallows only that key; nothing is stored or logged.
 - Captures the default microphone only while the key is held.
-- Optional **Brain**: sends the recognized text (never audio) to an
-  OpenAI-compatible endpoint of your choice, self-hosted or cloud, to remove
-  filler words and tidy punctuation before insertion. Off by default. Configure
-  the base URL (for example `http://127.0.0.1:12345/v1`), optional API key,
-  model and instructions in Settings → Brain; the model list can be refreshed
-  from the server. The request uses `/chat/completions`. If the server fails,
-  the text is inserted as recognized. The tray menu always shows whether the
-  Brain is on and which server it uses, and a plain `http://` address outside
-  this machine and the local network triggers a warning.
+- Optional **Brain**, off by default: an AI model edits the dictated text on
+  command, as in the macOS app. End a phrase with "Писарь, исправь" (fix it),
+  "Писарь, сократи" (shorten), "Писарь, переведи на английский" (translate)
+  and so on; without the address the text is inserted at once and no model
+  sees it. "Edit every take" sends every dictation through the Brain instead.
+  The Brain runs either
+  - **on this computer**: llama.cpp's `llama-server` (CPU build) with
+    Qwen3-4B-Instruct-2507 Q3_K_M, about 2 GB, downloaded on request into
+    `%LOCALAPPDATA%\GigaPisar\brain` and verified by SHA-256. It starts on the
+    first command, listens on a random loopback port with a random key, unloads
+    after 15 idle minutes and is tied to Pisar by a job object, so it never
+    outlives the app. Nothing leaves the machine; or
+  - **on a server of your choice** with an OpenAI-compatible API, self-hosted
+    or cloud: only the recognized text (never audio) is sent. Configure the
+    base URL (for example `http://127.0.0.1:12345/v1`), optional API key, model
+    and "every take" instructions in Settings → Brain. A plain `http://`
+    address outside this machine and the local network triggers a warning.
+
+  If the Brain fails, the text is inserted as recognized. The tray menu always
+  shows where the Brain runs.
 - Downloads the model once (about 200 MB) from the
   [giga-pisar-cli](https://github.com/moznoazachem/giga-pisar-cli) releases
   into `%LOCALAPPDATA%\GigaPisar\model` and verifies each file's SHA-256.
