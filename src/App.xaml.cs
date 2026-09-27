@@ -294,6 +294,8 @@ public partial class PisarApp : Application
             Log.Write($"take {samples.Length / (double)Recorder.SampleRate:F1}s peak {20 * Math.Log10(Math.Max(peak, 1e-9)):F0} dBFS silent={silent}");
 
             string text = "";
+            bool cleanupFailed = false;
+            bool cleanupReturnedEmpty = false;
             if (!silent && samples.Length > MinTakeSamples)
             {
                 if (_settings.KeepLastRecording)
@@ -307,6 +309,21 @@ public partial class PisarApp : Application
                     for (int i = 0; i < samples.Length; i++) samples[i] *= gain;
                 }
                 text = await Task.Run(() => _recognizer!.Transcribe(samples, Recorder.SampleRate));
+                if (text.Length > 0 && _settings.CleanupEnabled)
+                {
+                    try
+                    {
+                        text = await SpeechCleanup.CleanAsync(text, _settings.CleanupEndpointUrl,
+                            _settings.CleanupApiKey, _settings.CleanupModel, _settings.CleanupPrompt, _lifetime.Token);
+                        cleanupReturnedEmpty = text.Length == 0;
+                    }
+                    catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
+                    catch (Exception ex)
+                    {
+                        Log.Write($"speech cleanup failed: {ex.GetType().Name}: {ex.Message}");
+                        cleanupFailed = true;
+                    }
+                }
             }
 
             if (text.Length > 0)
@@ -317,8 +334,11 @@ public partial class PisarApp : Application
                 if (result == InsertResult.Blocked)
                     Hint(L.T("Это окно запущено от администратора, вставить туда нельзя. Текст лежит в буфере обмена.",
                              "That window runs as administrator; typing into it is blocked. The text is on the clipboard."));
+                else if (cleanupFailed)
+                    Hint(L.T("Сервер очистки недоступен. Вставлен исходный текст.",
+                        "Cleanup server unavailable. Original text inserted."));
             }
-            else if (samples.Length <= MinTakeSamples)
+            else if (samples.Length <= MinTakeSamples || cleanupReturnedEmpty)
             {
                 overlay?.HideNow();
             }

@@ -34,6 +34,11 @@
         <CheckBox x:Name="UpdatesBox" Margin="0,8,0,0" Click="Updates_Click"/>
 
         <Separator Margin="0,18,0,12"/>
+        <TextBlock x:Name="CleanupHeading" FontSize="15" FontWeight="SemiBold"/>
+        <TextBlock x:Name="CleanupHint" Margin="0,4,0,8" Opacity="0.8" TextWrapping="Wrap"/>
+        <Button x:Name="CleanupButton" HorizontalAlignment="Left" Padding="12,4" Click="Cleanup_Click"/>
+
+        <Separator Margin="0,18,0,12"/>
         <TextBlock x:Name="AboutHeading" FontSize="15" FontWeight="SemiBold"/>
         <TextBlock x:Name="About" Margin="0,4,0,0" Opacity="0.8" TextWrapping="Wrap"/>
         <TextBlock x:Name="MicLine" Margin="0,4,0,0" Opacity="0.8" TextWrapping="Wrap"/>

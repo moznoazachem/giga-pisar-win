@@ -22,6 +22,9 @@ public sealed class KeyboardHook : IDisposable
     private Exception? _installError;
     private volatile int _hotkeyVk;
     private bool _down;
+    private bool _leftCtrlDown;
+    private int _activeWinVk;
+    private int _activeSingleVk;
 
     public int HotkeyVk { get => _hotkeyVk; set => _hotkeyVk = value; }
 
@@ -63,17 +66,60 @@ public sealed class KeyboardHook : IDisposable
         {
             var info = Marshal.PtrToStructure<Native.KBDLLHOOKSTRUCT>(lParam);
             bool injected = (info.flags & Native.LLKHF_INJECTED) != 0;
-            if (!injected && info.vkCode == (uint)_hotkeyVk)
+            if (!injected)
             {
                 int msg = (int)wParam;
-                if (msg == Native.WM_KEYDOWN || msg == Native.WM_SYSKEYDOWN)
+                bool keyDown = msg == Native.WM_KEYDOWN || msg == Native.WM_SYSKEYDOWN;
+                bool keyUp = msg == Native.WM_KEYUP || msg == Native.WM_SYSKEYUP;
+                int vk = info.vkCode == Native.VK_CONTROL
+                    ? (info.flags & Native.LLKHF_EXTENDED) != 0 ? 0xA3 : 0xA2
+                    : (int)info.vkCode;
+
+                if (vk == 0xA2)
                 {
-                    if (!_down) { _down = true; Pressed?.Invoke(); }
-                    return 1;   // swallow, including auto-repeat
+                    if (keyDown) _leftCtrlDown = true;
+                    if (keyUp)
+                    {
+                        _leftCtrlDown = false;
+                        if (_activeWinVk != 0 && _down) { _down = false; Released?.Invoke(); }
+                    }
                 }
-                if (msg == Native.WM_KEYUP || msg == Native.WM_SYSKEYUP)
+
+                if (vk == _activeWinVk)
                 {
-                    if (_down) { _down = false; Released?.Invoke(); }
+                    if (keyUp)
+                    {
+                        _activeWinVk = 0;
+                        if (_down) { _down = false; Released?.Invoke(); }
+                    }
+                    return 1;
+                }
+
+                if (vk == _activeSingleVk)
+                {
+                    if (keyUp)
+                    {
+                        _activeSingleVk = 0;
+                        if (_down) { _down = false; Released?.Invoke(); }
+                    }
+                    return 1;
+                }
+
+                if (_hotkeyVk == Settings.LeftCtrlWinHotkey)
+                {
+                    if (keyDown && _leftCtrlDown && (vk == 0x5B || vk == 0x5C))
+                    {
+                        _activeWinVk = vk;
+                        _down = true;
+                        Pressed?.Invoke();
+                        return 1;
+                    }
+                }
+                else if (vk == _hotkeyVk && keyDown)
+                {
+                    _activeSingleVk = vk;
+                    _down = true;
+                    Pressed?.Invoke();
                     return 1;
                 }
             }
