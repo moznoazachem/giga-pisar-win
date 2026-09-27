@@ -21,22 +21,24 @@ alternative in Settings.
   command, as in the macOS app. End a phrase with "Писарь, исправь" (fix it),
   "Писарь, сократи" (shorten), "Писарь, переведи на английский" (translate)
   and so on; without the address the text is inserted at once and no model
-  sees it. "Edit every take" sends every dictation through the Brain instead.
-  The Brain runs either
-  - **on this computer**: llama.cpp's `llama-server` (CPU build) with
-    Qwen3-4B-Instruct-2507 Q3_K_M, about 2 GB, downloaded on request into
-    `%LOCALAPPDATA%\GigaPisar\brain` and verified by SHA-256. It starts on the
-    first command, listens on a random loopback port with a random key, unloads
-    after 15 idle minutes and is tied to Pisar by a job object, so it never
-    outlives the app. Nothing leaves the machine; or
-  - **on a server of your choice** with an OpenAI-compatible API, self-hosted
-    or cloud: only the recognized text (never audio) is sent. Configure the
-    base URL (for example `http://127.0.0.1:12345/v1`), optional API key, model
-    and "every take" instructions in Settings → Brain. A plain `http://`
-    address outside this machine and the local network triggers a warning.
+  sees it. With text selected when you press the key, what you say becomes a
+  command on that selection and the answer replaces it (Ctrl+Z brings the
+  original back). "Edit every take" sends every dictation through the Brain.
+  - **In the cloud or on your own server**: pick the service (DeepSeek,
+    OpenRouter, OpenAI, Groq, Gemini, Anthropic) and paste the key in
+    Settings → Brain; the service is recognized from the key, the model list
+    loads and a model is chosen. Own servers (LM Studio, Ollama, llama.cpp)
+    take an address instead. Only text is sent, never audio: the dictation,
+    or the selected text for a command on a selection. The key is stored
+    encrypted with Windows DPAPI.
+  - **On this computer** (llama.cpp + Qwen3-4B, about 2 GB, fully offline) is
+    built in but not offered yet; it comes with a later release.
 
-  If the Brain fails, the text is inserted as recognized. The tray menu always
-  shows where the Brain runs.
+  While the Brain is on, each press of the key asks Windows (UI Automation)
+  for the selected text of the focused control; nothing is read otherwise,
+  terminals are skipped, and nothing is stored. If the Brain fails, the text
+  is inserted as recognized and a selection is left untouched. The tray menu
+  always shows where the Brain runs.
 - Downloads the model once (about 200 MB) from the
   [giga-pisar-cli](https://github.com/moznoazachem/giga-pisar-cli) releases
   into `%LOCALAPPDATA%\GigaPisar\model` and verifies each file's SHA-256.

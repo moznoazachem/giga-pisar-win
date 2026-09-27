@@ -43,7 +43,8 @@ public static partial class BrainProviders
         if (key.StartsWith("gsk_")) return Groq;
         if (key.StartsWith("AIza")) return Gemini;
         if (DeepSeekKey().IsMatch(key)) return DeepSeek;
-        if (key.StartsWith("sk-proj-") || key.StartsWith("sk-svcacct-") || key.StartsWith("sk-")) return OpenAI;
+        // Plain "sk-" is used by several services; only OpenAI's long keys are a safe guess.
+        if (key.StartsWith("sk-proj-") || key.StartsWith("sk-svcacct-") || (key.StartsWith("sk-") && key.Length >= 45)) return OpenAI;
         return null;
     }
 
@@ -55,9 +56,12 @@ public static partial class BrainProviders
         return All.FirstOrDefault(p => !p.IsCustom && string.Equals(p.BaseUrl, u, StringComparison.OrdinalIgnoreCase)) ?? Custom;
     }
 
+    [GeneratedRegex("embed|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe|search|guard|imagen|veo|aqa", RegexOptions.IgnoreCase)]
+    private static partial Regex NonChatModel();
+
     /// <summary>Only chat models are useful here: drop embeddings, speech, images and the like.</summary>
     public static IEnumerable<string> ChatModels(IEnumerable<string> ids) =>
-        ids.Where(id => !Regex.IsMatch(id, "embed|whisper|tts|dall-e|moderation|image|audio|realtime|transcribe|search|guard|imagen|veo|aqa", RegexOptions.IgnoreCase))
+        ids.Where(id => !NonChatModel().IsMatch(id))
            .Select(id => id.StartsWith("models/") ? id["models/".Length..] : id);
 
     /// <summary>A sensible default among the models the server offers.</summary>

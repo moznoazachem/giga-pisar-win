@@ -111,17 +111,22 @@ public static class SpeechCleanup
 
         bool withReasoning = _sendReasoningEffort;
         using var response = await PostAsync(url!, apiKey, model, prompt, text, withReasoning, extra, cancellationToken);
-        if (withReasoning && response.StatusCode == HttpStatusCode.BadRequest)
+        if (withReasoning && response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity)
         {
-            Log.Write("cleanup server rejected reasoning_effort; retrying without it");
-            _sendReasoningEffort = false;
-            using var retry = await PostAsync(url!, apiKey, model, prompt, text, false, extra, cancellationToken);
-            return await ReadContentAsync(retry, cancellationToken);
+            // Only drop the parameter when the server complains about it; a wrong model name is a real error.
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (body.Contains("reasoning", StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Write("cleanup server rejected reasoning_effort; retrying without it");
+                _sendReasoningEffort = false;
+                using var retry = await PostAsync(url!, apiKey, model, prompt, text, false, extra, cancellationToken);
+                return await ReadContentAsync(retry, cancellationToken);
+            }
         }
         return await ReadContentAsync(response, cancellationToken);
     }
 
-    private static Task<HttpResponseMessage> PostAsync(Uri url, string apiKey, string model, string prompt, string text,
+    private static async Task<HttpResponseMessage> PostAsync(Uri url, string apiKey, string model, string prompt, string text,
         bool withReasoning, IDictionary<string, object>? extra, CancellationToken cancellationToken)
     {
         var body = new Dictionary<string, object>
@@ -137,13 +142,14 @@ public static class SpeechCleanup
         if (extra != null) foreach (var (k, v) in extra) body[k] = v;
 
         // Serialized up front so the request carries Content-Length; some small self-hosted servers do not accept chunked bodies.
-        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        using var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json"),
         };
         if (!string.IsNullOrWhiteSpace(apiKey))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
-        return Client.SendAsync(request, cancellationToken);
+        // The response body is buffered (ResponseContentRead), so the request can go right after.
+        return await Client.SendAsync(request, cancellationToken);
     }
 
     private static async Task<string> ReadContentAsync(HttpResponseMessage response, CancellationToken cancellationToken)

@@ -92,7 +92,7 @@ public static class LocalBrain
                 var zip = Path.Combine(Dir, "engine.zip.part");
                 if (File.Exists(zip)) File.Delete(zip);
                 await FetchAsync(http, EngineUrl, zip, 64L << 20, null, ct);
-                Verify(zip, EngineSha256, "engine");
+                await Task.Run(() => Verify(zip, EngineSha256, "engine"), ct);
                 progress.Report(new ModelDownloader.Progress(0, 0, "unpack"));
                 await Task.Run(() =>
                 {
@@ -113,24 +113,30 @@ public static class LocalBrain
                     try
                     {
                         await FetchAsync(http, ModelUrls[i], part, ModelBytes, progress, ct);
+                        progress.Report(new ModelDownloader.Progress(0, 0, "verify"));
+                        try { await Task.Run(() => Verify(part, ModelSha256, "model"), ct); }
+                        catch (InvalidDataException) { File.Delete(part); throw; }   // a bad file must not be resumed
                         break;
                     }
-                    catch (Exception e) when (i + 1 < ModelUrls.Length && e is HttpRequestException or ModelDownloadException or OperationCanceledException
-                                              && !ct.IsCancellationRequested)
+                    catch (Exception e) when (i + 1 < ModelUrls.Length && !ct.IsCancellationRequested
+                                              && e is HttpRequestException or ModelDownloadException or OperationCanceledException
+                                                   or IOException or InvalidDataException)
                     {
-                        // Same bytes everywhere (checked by SHA-256 below), so the next source continues the same .part.
-                        Log.Write($"brain model source {i} failed: {e.Message}; trying the next one");
+                        // Same bytes everywhere (checked by SHA-256), so the next source continues the same .part.
+                        Log.Write($"brain model source {i} failed: {e.GetType().Name}: {e.Message}; trying the next one");
                     }
                 }
-                progress.Report(new ModelDownloader.Progress(0, 0, "verify"));
-                try { await Task.Run(() => Verify(part, ModelSha256, "model"), ct); }
-                catch (InvalidDataException) { File.Delete(part); throw; }   // a bad file must not be resumed
                 File.Move(part, ModelPath, overwrite: true);
             }
             progress.Report(new ModelDownloader.Progress(1, 1, "done"));
         }
         catch (ModelDownloadException) { throw; }
-        catch (OperationCanceledException) { throw; }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }   // the user pressed Cancel
+        catch (OperationCanceledException e)
+        {
+            // Our own idle timeout: the connection stalled. That is a network failure with Retry, not a cancel.
+            throw new ModelDownloadException(DownloadFailure.Network, "download stalled", e);
+        }
         catch (IOException e) when (e.HResult == unchecked((int)0x80070070))
         {
             throw new ModelDownloadException(DownloadFailure.NoSpace, e.Message, e);
@@ -207,6 +213,7 @@ public static class LocalBrain
     private static int _port;
     private static string _apiKey = "";
     private static System.Threading.Timer? _idleTimer;
+    private static StreamWriter? _log;
 
     public static bool Running { get { lock (Gate) return _server is { HasExited: false }; } }
     public static string EndpointUrl => $"http://127.0.0.1:{_port}/v1";
@@ -218,8 +225,8 @@ public static class LocalBrain
         Process server;
         lock (Gate)
         {
-            if (_server is { HasExited: false }) { TouchIdle(); return; }
-            server = StartProcess();
+            // Alive is not the same as ready: a server that is still loading gets the health wait below too.
+            server = _server is { HasExited: false } alive ? alive : StartProcess();
         }
 
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
@@ -268,18 +275,24 @@ public static class LocalBrain
                                   "-c", ContextTokens.ToString(), "--no-webui" })
             psi.ArgumentList.Add(a);
 
-        var log = new StreamWriter(LogPath, append: false) { AutoFlush = true };
+        // Shared read/write so a writer left from a previous run can never block this one.
+        var log = new StreamWriter(new FileStream(LogPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite)) { AutoFlush = true };
+        _log = log;
         var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        bool closed = false;
         void Write(string? line)
         {
             if (line == null) return;
-            lock (log) { if (!closed) try { log.WriteLine(line); } catch { } }
+            lock (log) { try { log.WriteLine(line); } catch { } }
         }
         p.OutputDataReceived += (_, e) => Write(e.Data);
         p.ErrorDataReceived += (_, e) => Write(e.Data);
-        p.Exited += (_, _) => { lock (log) { closed = true; log.Dispose(); } };
-        p.Start();
+        try { p.Start(); }
+        catch
+        {
+            CloseLog();
+            p.Dispose();
+            throw;
+        }
         p.BeginOutputReadLine();
         p.BeginErrorReadLine();
         AttachToJob(p);
@@ -318,12 +331,22 @@ public static class LocalBrain
 
     private static void TouchIdle()
     {
-        _idleTimer?.Dispose();
-        _idleTimer = new System.Threading.Timer(_ =>
+        lock (Gate)
         {
-            Log.Write("brain idle for 15 minutes, releasing memory");
-            Stop();
-        }, null, IdleStop, Timeout.InfiniteTimeSpan);
+            _idleTimer?.Dispose();
+            _idleTimer = new System.Threading.Timer(_ =>
+            {
+                Log.Write("brain idle for 15 minutes, releasing memory");
+                Stop();
+            }, null, IdleStop, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private static void CloseLog()
+    {
+        var log = _log;
+        _log = null;
+        if (log != null) lock (log) { try { log.Dispose(); } catch { } }
     }
 
     public static void Stop()
@@ -332,9 +355,18 @@ public static class LocalBrain
         {
             _idleTimer?.Dispose();
             _idleTimer = null;
-            try { if (_server is { HasExited: false }) _server.Kill(); } catch { }
+            try
+            {
+                if (_server is { HasExited: false })
+                {
+                    _server.Kill();
+                    _server.WaitForExit(2000);
+                }
+            }
+            catch { }
             _server?.Dispose();
             _server = null;
+            CloseLog();
         }
     }
 }

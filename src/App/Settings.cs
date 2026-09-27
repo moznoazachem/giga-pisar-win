@@ -53,7 +53,12 @@ public sealed class Settings
     public string? LegacyCleanupApiKey
     {
         get => null;
-        set { if (!string.IsNullOrEmpty(value) && CleanupApiKey.Length == 0) CleanupApiKey = value; }
+        set
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            if (CleanupApiKey.Length == 0) CleanupApiKey = value;
+            _plainKeyOnDisk = true;
+        }
     }
     public string CleanupModel { get; set; } = "";
     /// <summary>Own "every take" instructions; empty means our default in the interface language.</summary>
@@ -81,12 +86,19 @@ public sealed class Settings
         Converters = { new JsonStringEnumConverter() },
     };
 
+    [JsonIgnore]
+    private bool _plainKeyOnDisk;
+
     public static Settings Load()
     {
         try
         {
             if (File.Exists(SettingsPath))
-                return JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsPath), JsonOptions) ?? new Settings();
+            {
+                var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsPath), JsonOptions) ?? new Settings();
+                if (s._plainKeyOnDisk) s.Save();   // the plain-text key from 1.0.3 leaves the disk at once, encrypted
+                return s;
+            }
         }
         catch (Exception e) { Log.Write($"settings load failed: {e.Message}"); }
         return new Settings();

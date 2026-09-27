@@ -74,8 +74,19 @@ public static partial class Brain
         return L.T("Причёсываю…", "Polishing…");
     }
 
-    public static bool ServerConfigured(Settings s) =>
-        SpeechCleanup.TryGetCompletionsUrl(s.CleanupEndpointUrl, out _) && s.CleanupModel.Length > 0;
+    /// <summary>The one rule for "the server Brain is set up": address and model, and a key for any cloud service.</summary>
+    public static bool ServerConfigured(Settings s) => ServerConfigured(s.CleanupEndpointUrl, s.CleanupModel, s.CleanupApiKey);
+
+    public static bool ServerConfigured(string endpoint, string model, string key) =>
+        SpeechCleanup.TryGetCompletionsUrl(endpoint, out _) && model.Trim().Length > 0
+        && (BrainProviders.FromUrl(endpoint).IsCustom || key.Trim().Length > 0);
+
+    /// <summary>A sane answer is about as long as the text; anything far longer is not a cleanup and is not typed in.</summary>
+    private static void CheckLength(string answer, string body)
+    {
+        if (answer.Length > Math.Max(4000, body.Length * 4))
+            throw new BrainException(L.T("ответ нейросети подозрительно длинный, вставлять не стал", "the model's answer is suspiciously long, not inserted"));
+    }
 
     /// <summary>
     /// Runs the text through the chosen Brain. command == null means "edit every take" mode.
@@ -101,11 +112,16 @@ public static partial class Brain
                 // Qwen3 can think aloud in a <think> block; for editing text that is only slow.
                 ["chat_template_kwargs"] = new Dictionary<string, object> { ["enable_thinking"] = false },
             };
-            return await SpeechCleanup.CleanAsync(body, LocalBrain.EndpointUrl, LocalBrain.ApiKey, "local", prompt, ct,
+            var local = await SpeechCleanup.CleanAsync(body, LocalBrain.EndpointUrl, LocalBrain.ApiKey, "local", prompt, ct,
                 extra, TimeSpan.FromSeconds(120));
+            CheckLength(local, body);
+            return local;
         }
 
         status(action);
-        return await SpeechCleanup.CleanAsync(body, s.CleanupEndpointUrl, s.CleanupApiKey, s.CleanupModel, prompt, ct);
+        // No max_tokens here: newer OpenAI models reject it. The length check below guards instead.
+        var answer = await SpeechCleanup.CleanAsync(body, s.CleanupEndpointUrl, s.CleanupApiKey, s.CleanupModel, prompt, ct);
+        CheckLength(answer, body);
+        return answer;
     }
 }

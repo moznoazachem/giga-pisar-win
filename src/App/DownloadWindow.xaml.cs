@@ -22,10 +22,10 @@ public partial class DownloadWindow : Window
     }
 
     public DownloadWindow(string heading, string intro, Func<IProgress<ModelDownloader.Progress>, CancellationToken, Task> work,
-        string? spaceNeeded = null)
+        string spaceNeeded)
     {
         _work = work;
-        _spaceNeeded = spaceNeeded ?? L.T("2,5 ГБ", "2.5 GB");
+        _spaceNeeded = spaceNeeded;
         InitializeComponent();
         Title = L.T("Гига Писарь", "Giga Pisar");
         Heading.Text = heading;

@@ -24,13 +24,17 @@ public static class SelectionReader
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder name, int max);
 
+    /// <summary>A read that has not finished yet (a hung app): no new ones pile up behind it.</summary>
+    private static Task<string?>? _inFlight;
+
     /// <summary>The selected text of the focused control, or null when there is none or it cannot be read in time.</summary>
     public static async Task<string?> TryGetAsync()
     {
         var fg = Native.GetForegroundWindow();
         if (fg == IntPtr.Zero || IsTerminal(fg)) return null;
+        if (_inFlight is { IsCompleted: false }) return null;
         // UI Automation calls can block on a busy app; they run on a worker thread and we stop waiting after a moment.
-        var work = Task.Run(Read);
+        var work = _inFlight = Task.Run(Read);
         var done = await Task.WhenAny(work, Task.Delay(Timeout));
         if (done != work) { Log.Write("selection: UI Automation timed out"); return null; }
         return work.Result;

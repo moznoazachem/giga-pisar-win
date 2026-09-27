@@ -25,7 +25,11 @@ public partial class BrainServerPanel : UserControl
     {
         InitializeComponent();
         _keyPause.Tick += (_, _) => { _keyPause.Stop(); _ = LoadModelsAsync(pickDefault: true); };
-        Unloaded += (_, _) => _loading?.Cancel();
+        Unloaded += (_, _) =>
+        {
+            _keyPause.Stop();   // no key goes anywhere after the window is closed
+            _loading?.Cancel();
+        };
     }
 
     public void Bind(Settings settings, Action apply)
@@ -33,6 +37,8 @@ public partial class BrainServerPanel : UserControl
         _settings = settings;
         _apply = apply;
         _init = true;
+        _keyPause.Stop();
+        _loading?.Cancel();
         ProviderLabel.Text = L.T("Сервис", "Service");
         KeyLabel.Text = L.T("Ключ API", "API key");
         UrlLabel.Text = L.T("Адрес", "Address");
@@ -56,8 +62,11 @@ public partial class BrainServerPanel : UserControl
                   $"Text (not audio) goes to {SpeechCleanup.HostOf(settings.CleanupEndpointUrl)}, model {settings.CleanupModel}.")
             : L.T("Выберите сервис и вставьте ключ, модель подберётся сама.", "Pick the service and paste the key; the model is chosen for you.");
         UpdateProviderUi();
+        _lastProvider = current;
         _init = false;
     }
+
+    private BrainProvider _lastProvider = BrainProviders.DeepSeek;
 
     public void FocusKey()
     {
@@ -87,6 +96,11 @@ public partial class BrainServerPanel : UserControl
     private void Provider_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_init) return;
+        // A cloud key must never travel to an address typed for "own server" (and back).
+        if (Provider.IsCustom != _lastProvider.IsCustom) { _init = true; KeyBox.Password = ""; _init = false; }
+        _lastProvider = Provider;
+        _loading?.Cancel();
+        _keyPause.Stop();
         UpdateProviderUi();
         ClearModels();
         Status.Text = "";
@@ -102,6 +116,8 @@ public partial class BrainServerPanel : UserControl
         {
             _init = true;
             ProviderBox.SelectedIndex = Array.IndexOf(BrainProviders.All, guess);
+            _lastProvider = guess;
+            _loading?.Cancel();
             UpdateProviderUi();
             ClearModels();
             _init = false;
@@ -109,6 +125,7 @@ public partial class BrainServerPanel : UserControl
         }
         _keyPause.Stop();
         if (KeyBox.Password.Trim().Length > 0) _keyPause.Start();
+        else _loading?.Cancel();
     }
 
     private void Url_LostFocus(object sender, RoutedEventArgs e)
@@ -137,6 +154,7 @@ public partial class BrainServerPanel : UserControl
             return;
         }
         _loading?.Cancel();
+        _loading?.Dispose();
         var cts = _loading = new CancellationTokenSource();
         RefreshButton.IsEnabled = false;
         Status.Text = L.T("Проверяю ключ и загружаю модели…", "Checking the key and loading models…");
@@ -186,8 +204,7 @@ public partial class BrainServerPanel : UserControl
         var endpoint = Endpoint;
         var model = ModelBox.Text.Trim();
         var key = KeyBox.Password.Trim();
-        if (!SpeechCleanup.TryGetCompletionsUrl(endpoint, out _) || model.Length == 0 || (!Provider.IsCustom && key.Length == 0))
-            return false;
+        if (!Brain.ServerConfigured(endpoint, model, key)) return false;
         if (endpoint == _settings.CleanupEndpointUrl && key == _settings.CleanupApiKey && model == _settings.CleanupModel)
             return true;
         _settings.CleanupEndpointUrl = endpoint;

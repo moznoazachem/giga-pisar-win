@@ -201,6 +201,10 @@ internal static class Native
     public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
 
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+    public const int VK_LCONTROL = 0xA2;
+
     public const int ASFW_ANY = -1;
     [DllImport("user32.dll")]
     public static extern bool AllowSetForegroundWindow(int processId);

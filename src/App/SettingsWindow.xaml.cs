@@ -28,7 +28,7 @@ public partial class SettingsWindow : Window
         _unpin = unpin;
         _selectBrain = selectBrain;
         InitializeComponent();
-        ServerPanel.Saved += () => { UpdateBrainTexts(); _apply(); };
+        ServerPanel.Saved += UpdateBrainTexts;   // the panel has already applied and saved
         Localize();
         Nav.SelectedIndex = _lastPage;
     }
@@ -91,8 +91,8 @@ public partial class SettingsWindow : Window
         UpdatesBox.IsChecked = _settings.CheckUpdates;
 
         CleanupHeading.Text = L.T("Мозг", "Brain");
-        CleanupHint.Text = L.T("Нейросеть правит надиктованное по команде. Скажите в конце: «Писарь, исправь», «Писарь, сократи» или «Писарь, переведи на английский». Без обращения текст вставляется сразу.",
-                               "An AI model edits the dictation on command. End with \"Pisar, fix it\", \"Pisar, make it shorter\" or \"Pisar, translate into English\" (said in Russian). Without the address the text goes in at once.");
+        CleanupHint.Text = L.T("Нейросеть правит надиктованное по команде. Скажите в конце: «Писарь, исправь», «Писарь, сократи» или «Писарь, переведи на английский». Без обращения текст вставляется сразу. Если перед диктовкой выделить текст, сказанное станет командой над ним.",
+                               "An AI model edits the dictation on command. End with \"Pisar, fix it\", \"Pisar, make it shorter\" or \"Pisar, translate into English\" (said in Russian). Without the address the text goes in at once. With text selected, what you say becomes a command on it.");
         BrainLabel.Text = L.T("Где думает", "Runs on");
         BrainBox.Items.Clear();
         BrainBox.Items.Add(new ComboBoxItem { Content = L.T("Выключен", "Off"), Tag = BrainSource.Off });

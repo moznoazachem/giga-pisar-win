@@ -22,7 +22,6 @@ public sealed class KeyboardHook : IDisposable
     private Exception? _installError;
     private volatile int _hotkeyVk;
     private bool _down;
-    private bool _leftCtrlDown;
     private int _activeWinVk;
     private int _activeSingleVk;
 
@@ -75,14 +74,10 @@ public sealed class KeyboardHook : IDisposable
                     ? (info.flags & Native.LLKHF_EXTENDED) != 0 ? 0xA3 : 0xA2
                     : (int)info.vkCode;
 
-                if (vk == 0xA2)
+                if (vk == Native.VK_LCONTROL && keyUp && _activeWinVk != 0 && _down)
                 {
-                    if (keyDown) _leftCtrlDown = true;
-                    if (keyUp)
-                    {
-                        _leftCtrlDown = false;
-                        if (_activeWinVk != 0 && _down) { _down = false; Released?.Invoke(); }
-                    }
+                    _down = false;
+                    Released?.Invoke();
                 }
 
                 if (vk == _activeWinVk)
@@ -107,7 +102,9 @@ public sealed class KeyboardHook : IDisposable
 
                 if (_hotkeyVk == Settings.LeftCtrlWinHotkey)
                 {
-                    if (keyDown && _leftCtrlDown && (vk == 0x5B || vk == 0x5C))
+                    // The real key state, not a remembered flag: a key-up on the secure desktop (UAC,
+                    // Ctrl+Alt+Del) never reaches the hook and would leave Win swallowed for good.
+                    if (keyDown && (vk == 0x5B || vk == 0x5C) && (Native.GetAsyncKeyState(Native.VK_LCONTROL) & 0x8000) != 0)
                     {
                         _activeWinVk = vk;
                         _down = true;
