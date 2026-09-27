@@ -34,6 +34,12 @@
             </ListBoxItem>
             <ListBoxItem>
                 <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE70F;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="NavEdit" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ListBoxItem>
+            <ListBoxItem>
+                <StackPanel Orientation="Horizontal">
                     <TextBlock Text="&#xE946;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" VerticalAlignment="Center"/>
                     <TextBlock x:Name="NavAbout" Margin="12,0,0,0" VerticalAlignment="Center"/>
                 </StackPanel>
@@ -94,6 +100,22 @@
                         <TextBox x:Name="PromptBox" Margin="0,6,0,0" Padding="7" Height="120" LostFocus="Prompt_LostFocus"
                                  TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True"/>
                     </Expander>
+                </StackPanel>
+
+                <!-- Editing a selection -->
+                <StackPanel x:Name="EditPage" Visibility="Collapsed">
+                    <TextBlock x:Name="EditHeading" FontSize="20" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="EditIntro" Margin="0,4,0,0" Opacity="0.75" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="SelectionBox" Margin="0,16,0,0" Click="Selection_Click"/>
+                    <TextBlock x:Name="SelectionHint" Margin="28,2,0,0" FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="ExamplesLabel" Margin="0,18,0,4" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="Examples" Opacity="0.85" TextWrapping="Wrap" LineHeight="22"/>
+                    <Border Margin="0,18,0,0" Padding="12,10" CornerRadius="6" BorderThickness="1" BorderBrush="#40808080">
+                        <DockPanel>
+                            <Button x:Name="GoBrainButton" DockPanel.Dock="Right" Padding="10,3" Margin="12,0,0,0" VerticalAlignment="Center" Click="GoBrain_Click"/>
+                            <TextBlock x:Name="EditBrainLine" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        </DockPanel>
+                    </Border>
                 </StackPanel>
 
                 <!-- About -->

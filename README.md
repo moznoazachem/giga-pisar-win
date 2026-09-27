@@ -23,7 +23,8 @@ alternative in Settings.
   and so on; without the address the text is inserted at once and no model
   sees it. With text selected when you press the key, what you say becomes a
   command on that selection and the answer replaces it (Ctrl+Z brings the
-  original back). "Edit every take" sends every dictation through the Brain.
+  original back); "Commands on selected text" turns this off. "Edit every take"
+  sends every dictation through the Brain.
   - **In the cloud or on your own server**: pick the service (DeepSeek,
     OpenRouter, OpenAI, Groq, Gemini, Anthropic) and paste the key in
     Settings → Brain; the service is recognized from the key, the model list
@@ -34,7 +35,7 @@ alternative in Settings.
   - **On this computer** (llama.cpp + Qwen3-4B, about 2 GB, fully offline) is
     built in but not offered yet; it comes with a later release.
 
-  While the Brain is on, each press of the key asks Windows (UI Automation)
+  While the Brain and selection commands are on, each press of the key asks Windows (UI Automation)
   for the selected text of the focused control; nothing is read otherwise,
   terminals are skipped, and nothing is stored. If the Brain fails, the text
   is inserted as recognized and a selection is left untouched. The tray menu

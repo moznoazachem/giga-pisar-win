@@ -178,7 +178,7 @@ public partial class PisarApp : Application
                 CleanupModel = "deepseek-flash",
             };
             var sw = new SettingsWindow(s, () => { }, () => { }, _ => Task.CompletedTask);
-            sw.ShowPage(kind switch { "brain" or "server" => SettingsWindow.Page.Brain, "about" => SettingsWindow.Page.About, _ => SettingsWindow.Page.Dictation });
+            sw.ShowPage(kind switch { "brain" or "server" => SettingsWindow.Page.Brain, "about" => SettingsWindow.Page.About, "edit" => SettingsWindow.Page.Edit, _ => SettingsWindow.Page.Dictation });
             Window w = sw;
             w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             w.Topmost = true;
@@ -392,7 +392,7 @@ public partial class PisarApp : Application
     private async Task HandlePressAsync()
     {
         if (_busy || _recognizer == null || _recorder.IsRecording) return;
-        _selectionAtPress = BrainUsable ? SelectionReader.TryGetAsync() : null;
+        _selectionAtPress = BrainUsable && _settings.BrainOnSelection ? SelectionReader.TryGetAsync() : null;
         try
         {
             await _recorder.StartAsync();
@@ -663,6 +663,9 @@ public partial class PisarApp : Application
         if (LocalBrain.Offered || _settings.Brain == BrainSource.Local) brain.DropDownItems.Add(brainLocal);
         brain.DropDownItems.Add(brainServer);
         menu.Items.Add(brain);
+        var editSel = new Forms.ToolStripMenuItem(L.T("Правка выделенного голосом", "Edit selection by voice")) { CheckOnClick = true };
+        editSel.Click += (_, _) => { _settings.BrainOnSelection = editSel.Checked; ApplySettings(); _settingsWindow?.Localize(); };
+        menu.Items.Add(editSel);
         var autostart = new Forms.ToolStripMenuItem(L.T("Запускать при входе в Windows", "Start when I sign in")) { CheckOnClick = true };
         autostart.Click += (_, _) => Autostart.Set(autostart.Checked);
         menu.Items.Add(autostart);
@@ -692,6 +695,8 @@ public partial class PisarApp : Application
                 BrainSource.Server => L.T($"Мозг: {host}", $"Brain: {host}"),
                 _ => L.T("Мозг: выключен", "Brain: off"),
             };
+            editSel.Checked = _settings.BrainOnSelection;
+            editSel.Enabled = BrainUsable;
             brainOff.Checked = _settings.Brain == BrainSource.Off;
             brainLocal.Checked = _settings.Brain == BrainSource.Local;
             brainServer.Checked = _settings.Brain == BrainSource.Server;

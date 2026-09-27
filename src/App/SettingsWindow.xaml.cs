@@ -19,7 +19,7 @@ public partial class SettingsWindow : Window
     /// <summary>Last open section, kept while Pisar runs.</summary>
     private static int _lastPage;
 
-    public enum Page { Dictation, Brain, About }
+    public enum Page { Dictation, Brain, Edit, About }
 
     public SettingsWindow(Settings settings, Action apply, Action unpin, Func<BrainSource, Task> selectBrain)
     {
@@ -41,7 +41,8 @@ public partial class SettingsWindow : Window
         _lastPage = Nav.SelectedIndex;
         DictationPage.Visibility = _lastPage == 0 ? Visibility.Visible : Visibility.Collapsed;
         BrainPage.Visibility = _lastPage == 1 ? Visibility.Visible : Visibility.Collapsed;
-        AboutPage.Visibility = _lastPage == 2 ? Visibility.Visible : Visibility.Collapsed;
+        EditPage.Visibility = _lastPage == 2 ? Visibility.Visible : Visibility.Collapsed;
+        AboutPage.Visibility = _lastPage == 3 ? Visibility.Visible : Visibility.Collapsed;
         if (_lastPage == 1 && _settings.Brain == BrainSource.Server) ServerPanel.FocusKey();
     }
 
@@ -52,6 +53,7 @@ public partial class SettingsWindow : Window
         Title = L.T("Гига Писарь: настройки", "Giga Pisar: settings");
         NavDictation.Text = L.T("Диктовка", "Dictation");
         NavBrain.Text = L.T("Мозг", "Brain");
+        NavEdit.Text = L.T("Правка выделенного", "Edit selection");
         NavAbout.Text = L.T("О программе", "About");
         Heading.Text = L.T("Диктовка", "Dictation");
         Intro.Text = L.T("Курсор в любой текст, зажмите клавишу и говорите. Отпустите, и текст появится сам.",
@@ -91,8 +93,8 @@ public partial class SettingsWindow : Window
         UpdatesBox.IsChecked = _settings.CheckUpdates;
 
         CleanupHeading.Text = L.T("Мозг", "Brain");
-        CleanupHint.Text = L.T("Нейросеть правит надиктованное по команде. Скажите в конце: «Писарь, исправь», «Писарь, сократи» или «Писарь, переведи на английский». Без обращения текст вставляется сразу. Если перед диктовкой выделить текст, сказанное станет командой над ним.",
-                               "An AI model edits the dictation on command. End with \"Pisar, fix it\", \"Pisar, make it shorter\" or \"Pisar, translate into English\" (said in Russian). Without the address the text goes in at once. With text selected, what you say becomes a command on it.");
+        CleanupHint.Text = L.T("Нейросеть правит надиктованное по команде. Скажите в конце: «Писарь, исправь», «Писарь, сократи» или «Писарь, переведи на английский». Без обращения текст вставляется сразу.",
+                               "An AI model edits the dictation on command. End with \"Pisar, fix it\", \"Pisar, make it shorter\" or \"Pisar, translate into English\" (said in Russian). Without the address the text goes in at once.");
         BrainLabel.Text = L.T("Где думает", "Runs on");
         BrainBox.Items.Clear();
         BrainBox.Items.Add(new ComboBoxItem { Content = L.T("Выключен", "Off"), Tag = BrainSource.Off });
@@ -108,6 +110,16 @@ public partial class SettingsWindow : Window
             if ((BrainSource)it.Tag == _settings.Brain) BrainBox.SelectedItem = it;
         ServerPanel.Bind(_settings, _apply);
         DeleteBrainButton.Content = L.T("Удалить модель с компьютера (2 ГБ)", "Delete the model from this computer (2 GB)");
+        EditHeading.Text = L.T("Правка выделенного", "Edit selection");
+        EditIntro.Text = L.T("Выделите текст в любой программе, зажмите клавишу диктовки и скажите, что с ним сделать. Результат встанет на место выделенного, а Ctrl+Z вернёт как было.",
+                             "Select text in any app, hold the dictation key and say what to do with it. The result replaces the selection; Ctrl+Z brings the original back.");
+        SelectionBox.Content = L.T("Править выделенный текст голосом", "Edit selected text by voice");
+        SelectionBox.IsChecked = _settings.BrainOnSelection;
+        SelectionHint.Text = L.T("Выключите, если хотите просто надиктовывать поверх выделенного: тогда выделение ни на что не влияет.",
+                                 "Turn off to simply dictate over a selection: then selecting changes nothing.");
+        ExamplesLabel.Text = L.T("Что можно сказать", "What you can say");
+        Examples.Text = L.T("«сделай короче»  ·  «исправь ошибки»  ·  «перепиши вежливее»\n«переведи на английский»  ·  «сделай списком»  ·  «добавь заголовок»",
+                            "\"make it shorter\"  ·  \"fix the mistakes\"  ·  \"make it more polite\"\n\"translate into English\"  ·  \"make it a list\"  ·  \"add a title\"\n(said in Russian)");
         EveryTakeBox.Content = L.T("Править каждую диктовку, без команды", "Edit every take, without a command");
         EveryTakeBox.IsChecked = _settings.BrainEveryTake;
         EveryTakeHint.Text = L.T("Удобно с быстрым облачным сервисом: нейросеть причёсывает всё подряд.",
@@ -191,6 +203,17 @@ public partial class SettingsWindow : Window
         ServerPanel.Visibility = b == BrainSource.Server ? Visibility.Visible : Visibility.Collapsed;
         DeleteBrainButton.Visibility = LocalBrain.Downloaded && b != BrainSource.Local ? Visibility.Visible : Visibility.Collapsed;
         var every = b == BrainSource.Off ? Visibility.Collapsed : Visibility.Visible;
+        // Editing a selection is done by the Brain: say which one, or that it has to be turned on first.
+        bool ready = b switch { BrainSource.Local => LocalBrain.Downloaded, BrainSource.Server => Brain.ServerConfigured(_settings), _ => false };
+        string host = SpeechCleanup.HostOf(_settings.CleanupEndpointUrl);
+        EditBrainLine.Text = !ready
+            ? L.T("Текст переписывает нейросеть, поэтому для правки нужен Мозг. Сейчас он не настроен.",
+                  "An AI model rewrites the text, so editing needs the Brain. It is not set up yet.")
+            : b == BrainSource.Local
+                ? L.T("Переписывает Мозг на этом компьютере, без интернета.", "Rewritten by the Brain on this computer, offline.")
+                : L.T($"Переписывает Мозг в облаке: {host}. Выделенный текст уходит туда, звук нет.",
+                      $"Rewritten by the Brain in the cloud: {host}. The selected text goes there, audio does not.");
+        GoBrainButton.Content = ready ? L.T("Мозг…", "Brain…") : L.T("Настроить Мозг", "Set up the Brain");
         EveryTakeBox.Visibility = every;
         EveryTakeHint.Visibility = every;
         PromptExpander.Visibility = b != BrainSource.Off && _settings.BrainEveryTake ? Visibility.Visible : Visibility.Collapsed;
@@ -211,6 +234,14 @@ public partial class SettingsWindow : Window
         var prompt = PromptBox.Text.Trim();
         // Our default (in any language) is stored as empty, so it keeps following the interface language.
         _settings.CleanupPrompt = prompt.Length == 0 || SpeechCleanup.IsDefaultPrompt(prompt) ? "" : prompt;
+        _apply();
+    }
+
+    private void GoBrain_Click(object sender, RoutedEventArgs e) => ShowPage(Page.Brain);
+
+    private void Selection_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.BrainOnSelection = SelectionBox.IsChecked == true;
         _apply();
     }
 

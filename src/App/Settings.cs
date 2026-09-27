@@ -25,6 +25,8 @@ public sealed class Settings
     public BrainSource Brain { get; set; } = BrainSource.Off;
     /// <summary>Send every take through the Brain, not only those ending with "Pisar, …".</summary>
     public bool BrainEveryTake { get; set; }
+    /// <summary>With text selected at the key press, the take is a command on the selection. On by default, as on macOS.</summary>
+    public bool BrainOnSelection { get; set; } = true;
 
     /// <summary>Read-only migration from 1.0.3, where the server Brain had a single on/off switch and cleaned every take.</summary>
     [JsonPropertyName("CleanupEnabled")]
