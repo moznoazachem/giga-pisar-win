@@ -56,7 +56,11 @@ public sealed class Settings
         set { if (!string.IsNullOrEmpty(value) && CleanupApiKey.Length == 0) CleanupApiKey = value; }
     }
     public string CleanupModel { get; set; } = "";
-    public string CleanupPrompt { get; set; } = SpeechCleanup.DefaultPrompt;
+    /// <summary>Own "every take" instructions; empty means our default in the interface language.</summary>
+    public string CleanupPrompt { get; set; } = "";
+    [JsonIgnore]
+    public string EffectiveCleanupPrompt => CleanupPrompt.Trim().Length == 0 || SpeechCleanup.IsDefaultPrompt(CleanupPrompt)
+        ? SpeechCleanup.DefaultPrompt : CleanupPrompt;
 
     /// <summary>Where the user dragged the overlay to (screen pixels, window top-left); null means "follow the caret".</summary>
     public int? OverlayX { get; set; }

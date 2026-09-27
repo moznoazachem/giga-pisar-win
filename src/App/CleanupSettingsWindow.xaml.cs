@@ -37,7 +37,7 @@ public partial class CleanupSettingsWindow : Window
         UrlBox.Text = settings.CleanupEndpointUrl;
         KeyBox.Password = settings.CleanupApiKey;
         ModelBox.Text = settings.CleanupModel;
-        PromptBox.Text = settings.CleanupPrompt;
+        PromptBox.Text = settings.EffectiveCleanupPrompt;
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -65,7 +65,8 @@ public partial class CleanupSettingsWindow : Window
         _settings.CleanupEndpointUrl = endpoint;
         _settings.CleanupApiKey = KeyBox.Password;
         _settings.CleanupModel = model;
-        _settings.CleanupPrompt = prompt;
+        // Our default (in any language) is stored as empty, so it keeps following the interface language.
+        _settings.CleanupPrompt = SpeechCleanup.IsDefaultPrompt(prompt) ? "" : prompt;
         _apply();
         Close();
     }

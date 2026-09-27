@@ -197,6 +197,10 @@ internal static class Native
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
 
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT value, int size);
+    public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+
     public const int ASFW_ANY = -1;
     [DllImport("user32.dll")]
     public static extern bool AllowSetForegroundWindow(int processId);

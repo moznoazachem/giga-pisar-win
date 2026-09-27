@@ -68,7 +68,7 @@ public static partial class Brain
     public static async Task<string> TransformAsync(Settings s, string body, string? command,
         Action<string> status, CancellationToken ct)
     {
-        string prompt = command == null ? s.CleanupPrompt : CommandPrompt + "\n\nКоманда пользователя к тексту: " + command + ".";
+        string prompt = command == null ? s.EffectiveCleanupPrompt : CommandPrompt + "\n\nКоманда пользователя к тексту: " + command + ".";
         string action = ActionLabel(command);
 
         if (s.Brain == BrainSource.Local)

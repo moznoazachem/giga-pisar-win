@@ -61,6 +61,8 @@ public partial class PisarApp : Application
             return BrainTest(args[1], args[2]);
         if (args.Length >= 2 && args[0] == "--brain-download")
             return BrainDownload(args[1]);
+        if (args.Length >= 3 && args[0] == "--shot")
+            return WindowShot(args[1], args[2], args.Length >= 4 ? args[3] : "ru");
         if (args.Length >= 2 && args[0] == "--settings-shot")
             return SettingsShot(args[1], args.Length >= 3 ? args[2] : "ru");
         JustUpdated = args.Length >= 1 && args[0] == "--updated";
@@ -138,6 +140,47 @@ public partial class PisarApp : Application
             File.WriteAllText(outPath, "ERROR: " + e);
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Screenshots for articles: opens a window filled with example values (nothing is saved),
+    /// captures exactly its frame from the screen and exits. Needs the display on.
+    /// kind: settings | server.
+    /// </summary>
+    private static int WindowShot(string kind, string outPath, string lang)
+    {
+        var app = new PisarApp();
+        app.InitializeComponent();
+        app.Startup += async (_, _) =>
+        {
+            L.Apply(lang == "en" ? UiLanguage.English : UiLanguage.Russian);
+            var s = new Settings
+            {
+                Brain = BrainSource.Server,
+                CleanupEndpointUrl = "https://openrouter.ai/api/v1",
+                CleanupApiKey = "sk-or-v1-0000000000000000000000000000",
+                CleanupModel = "deepseek/deepseek-chat-v3-0324",
+            };
+            Window w = kind == "server"
+                ? new CleanupSettingsWindow(s, () => { })
+                : new SettingsWindow(s, () => { }, () => { }, _ => Task.CompletedTask);
+            w.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+            w.Topmost = true;
+            w.Show();
+            w.Activate();
+            await Task.Delay(1500);
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+            if (Native.DwmGetWindowAttribute(hwnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out var r, System.Runtime.InteropServices.Marshal.SizeOf<Native.RECT>()) != 0)
+                Native.GetWindowRect(hwnd, out r);
+            using (var bmp = new System.Drawing.Bitmap(r.Right - r.Left, r.Bottom - r.Top))
+            {
+                using (var g = System.Drawing.Graphics.FromImage(bmp))
+                    g.CopyFromScreen(r.Left, r.Top, 0, 0, bmp.Size);
+                bmp.Save(outPath, System.Drawing.Imaging.ImageFormat.Png);
+            }
+            app.Shutdown();
+        };
+        return app.Run();
     }
 
     /// <summary>Design aid: renders the Settings window into a PNG (works with the display asleep).</summary>
