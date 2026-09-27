@@ -162,6 +162,9 @@ public static class SpeechCleanup
     public static async Task<IReadOnlyList<string>> GetModelsAsync(string endpoint, string apiKey, CancellationToken cancellationToken)
     {
         if (!TryGetCompletionsUrl(endpoint, out var completionsUrl)) throw new ArgumentException("Invalid cleanup endpoint URL");
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(20));
+        cancellationToken = deadline.Token;
         var modelsUrl = new Uri(completionsUrl!, "../models");
         using var request = new HttpRequestMessage(HttpMethod.Get, modelsUrl);
         if (!string.IsNullOrWhiteSpace(apiKey))

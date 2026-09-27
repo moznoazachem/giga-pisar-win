@@ -62,7 +62,7 @@ public partial class PisarApp : Application
         if (args.Length >= 2 && args[0] == "--brain-download")
             return BrainDownload(args[1]);
         if (args.Length >= 3 && args[0] == "--shot")
-            return WindowShot(args[1], args[2], args.Length >= 4 ? args[3] : "ru");
+            return WindowShot(args[1], args[2], args.Length >= 4 ? args[3] : "ru", args.Length >= 5 ? args[4] : null);
         if (args.Length >= 2 && args[0] == "--settings-shot")
             return SettingsShot(args[1], args.Length >= 3 ? args[2] : "ru");
         JustUpdated = args.Length >= 1 && args[0] == "--updated";
@@ -147,7 +147,7 @@ public partial class PisarApp : Application
     /// captures exactly its frame from the screen and exits. Needs the display on.
     /// kind: settings | server.
     /// </summary>
-    private static int WindowShot(string kind, string outPath, string lang)
+    private static int WindowShot(string kind, string outPath, string lang, string? keyFile)
     {
         var app = new PisarApp();
         app.InitializeComponent();
@@ -157,9 +157,10 @@ public partial class PisarApp : Application
             var s = new Settings
             {
                 Brain = BrainSource.Server,
-                CleanupEndpointUrl = "https://openrouter.ai/api/v1",
-                CleanupApiKey = "sk-or-v1-0000000000000000000000000000",
-                CleanupModel = "deepseek/deepseek-chat-v3-0324",
+                CleanupEndpointUrl = "https://api.deepseek.com/v1",
+                // A real key from a file shows the "key works" state; the file is the caller's to delete.
+                CleanupApiKey = keyFile != null && File.Exists(keyFile) ? File.ReadAllText(keyFile).Trim() : "sk-00000000000000000000000000000000",
+                CleanupModel = "deepseek-flash",
             };
             Window w = kind == "server"
                 ? new CleanupSettingsWindow(s, () => { })
@@ -168,7 +169,7 @@ public partial class PisarApp : Application
             w.Topmost = true;
             w.Show();
             w.Activate();
-            await Task.Delay(1500);
+            await Task.Delay(kind == "server" ? 4000 : 1500);   // the server window loads the model list first
             var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
             if (Native.DwmGetWindowAttribute(hwnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out var r, System.Runtime.InteropServices.Marshal.SizeOf<Native.RECT>()) != 0)
                 Native.GetWindowRect(hwnd, out r);
