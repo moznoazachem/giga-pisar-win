@@ -17,19 +17,22 @@ alternative in Settings.
   other apps do. It compares every key event with the configured key and
   swallows only that key; nothing is stored or logged.
 - Captures the default microphone only while the key is held.
-- Optionally sends recognized text to an OpenAI-compatible self-hosted endpoint
-  for cleanup before insertion. Audio stays on the machine. Configure the API
-  base URL (for example `http://127.0.0.1:12345/v1`), optional API key, and
-  model and cleanup prompt in Settings → Speech cleanup. You can refresh the
-  model list from the server or enter a model ID manually. The request uses `/chat/completions`.
-  If cleanup fails, the original recognized text is inserted.
+- Optional **Brain**: sends the recognized text (never audio) to an
+  OpenAI-compatible endpoint of your choice, self-hosted or cloud, to remove
+  filler words and tidy punctuation before insertion. Off by default. Configure
+  the base URL (for example `http://127.0.0.1:12345/v1`), optional API key,
+  model and instructions in Settings → Brain; the model list can be refreshed
+  from the server. The request uses `/chat/completions`. If the server fails,
+  the text is inserted as recognized. The tray menu always shows whether the
+  Brain is on and which server it uses, and a plain `http://` address outside
+  this machine and the local network triggers a warning.
 - Downloads the model once (about 200 MB) from the
   [giga-pisar-cli](https://github.com/moznoazachem/giga-pisar-cli) releases
   into `%LOCALAPPDATA%\GigaPisar\model` and verifies each file's SHA-256.
 - Keeps settings in `%APPDATA%\GigaPisar\settings.json` and a small log
   (take lengths, levels, errors; never text or audio) in
   `%LOCALAPPDATA%\GigaPisar\pisar.log`.
-  A configured cleanup API key is stored in that settings file as plain text.
+  A Brain API key is stored there encrypted with Windows DPAPI for the current user.
 - Optionally keeps the last take as `last.wav` in the same folder for
   troubleshooting (off by default; deleted when the option is turned off).
 - Starts with Windows if you left that box checked in the installer; the

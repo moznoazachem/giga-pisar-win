@@ -64,10 +64,13 @@ public partial class SettingsWindow : Window
         UpdatesBox.Content = L.T("Проверять обновления и предлагать их", "Check for updates and offer them");
         UpdatesBox.IsChecked = _settings.CheckUpdates;
 
-        CleanupHeading.Text = L.T("Очистка распознанной речи", "Speech cleanup");
-        CleanupHint.Text = L.T("Необязательное исправление текста через ваш OpenAI-совместимый сервер.",
-            "Optional text correction through your OpenAI-compatible server.");
-        CleanupButton.Content = L.T("Настроить очистку…", "Configure cleanup…");
+        CleanupHeading.Text = L.T("Мозг", "Brain");
+        CleanupHint.Text = _settings.CleanupEnabled
+            ? L.T($"Включён: текст правит нейросеть на сервере {SpeechCleanup.HostOf(_settings.CleanupEndpointUrl)}.",
+                  $"On: text is cleaned by the model on {SpeechCleanup.HostOf(_settings.CleanupEndpointUrl)}.")
+            : L.T("Выключен. Может убирать слова-паразиты и править текст через ваш сервер или облачную нейросеть.",
+                  "Off. Can remove filler words and tidy the text through your own server or a cloud model.");
+        CleanupButton.Content = L.T("Настроить Мозг…", "Set up the Brain…");
 
         AboutHeading.Text = L.T("О программе", "About");
         About.Text = L.T($"Версия {PisarApp.Version}. Распознавание идёт на вашем компьютере, звук никуда не отправляется. Модель лежит в {Settings.ModelDir}.",
@@ -130,6 +133,7 @@ public partial class SettingsWindow : Window
     private void Cleanup_Click(object sender, RoutedEventArgs e)
     {
         new CleanupSettingsWindow(_settings, _apply) { Owner = this }.ShowDialog();
+        Localize();
     }
 
     private void Link_Click(object sender, RequestNavigateEventArgs e)

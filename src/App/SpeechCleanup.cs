@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -28,6 +29,28 @@ public static class SpeechCleanup
 
     private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(30) };
 
+    /// <summary>
+    /// reasoning_effort is not part of every OpenAI-compatible API; some servers reject it with 400.
+    /// We send it until a server refuses once, then stop for the rest of the session.
+    /// </summary>
+    private static volatile bool _sendReasoningEffort = true;
+
+    /// <summary>True when text and key would travel unencrypted beyond this machine and the home network.</summary>
+    public static bool IsInsecureRemote(string endpoint)
+    {
+        if (!Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttp) return false;
+        if (uri.IsLoopback || uri.Host.EndsWith(".local", StringComparison.OrdinalIgnoreCase)) return false;
+        if (!IPAddress.TryParse(uri.Host, out var ip)) return true;
+        var b = ip.GetAddressBytes();
+        bool privateV4 = b.Length == 4 && (b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168) || (b[0] == 100 && b[1] >= 64 && b[1] <= 127));
+        bool privateV6 = ip.IsIPv6LinkLocal || ip.IsIPv6UniqueLocal;
+        return !(privateV4 || privateV6);
+    }
+
+    /// <summary>Short server name for menus, e.g. "api.openai.com" or "127.0.0.1:12345".</summary>
+    public static string HostOf(string endpoint) =>
+        Uri.TryCreate(endpoint.Trim(), UriKind.Absolute, out var uri) ? uri.Authority : endpoint.Trim();
+
     public static bool TryGetCompletionsUrl(string endpoint, out Uri? url)
     {
         url = null;
@@ -48,21 +71,44 @@ public static class SpeechCleanup
     {
         if (!TryGetCompletionsUrl(endpoint, out var url)) throw new ArgumentException("Invalid cleanup endpoint URL");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, url);
-        if (!string.IsNullOrWhiteSpace(apiKey))
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
-        request.Content = JsonContent.Create(new
+        bool withReasoning = _sendReasoningEffort;
+        using var response = await PostAsync(url!, apiKey, model, prompt, text, withReasoning, cancellationToken);
+        if (withReasoning && response.StatusCode == HttpStatusCode.BadRequest)
         {
-            model,
-            reasoning_effort = "none",
-            messages = new[]
+            Log.Write("cleanup server rejected reasoning_effort; retrying without it");
+            _sendReasoningEffort = false;
+            using var retry = await PostAsync(url!, apiKey, model, prompt, text, false, cancellationToken);
+            return await ReadContentAsync(retry, cancellationToken);
+        }
+        return await ReadContentAsync(response, cancellationToken);
+    }
+
+    private static Task<HttpResponseMessage> PostAsync(Uri url, string apiKey, string model, string prompt, string text,
+        bool withReasoning, CancellationToken cancellationToken)
+    {
+        var body = new Dictionary<string, object>
+        {
+            ["model"] = model,
+            ["messages"] = new[]
             {
                 new { role = "system", content = prompt },
                 new { role = "user", content = text },
             },
-        });
+        };
+        if (withReasoning) body["reasoning_effort"] = "none";
 
-        using var response = await Client.SendAsync(request, cancellationToken);
+        // Serialized up front so the request carries Content-Length; some small self-hosted servers do not accept chunked bodies.
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json"),
+        };
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
+        return Client.SendAsync(request, cancellationToken);
+    }
+
+    private static async Task<string> ReadContentAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
         response.EnsureSuccessStatusCode();
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);

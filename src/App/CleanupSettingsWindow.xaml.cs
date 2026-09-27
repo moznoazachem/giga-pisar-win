@@ -17,20 +17,20 @@ public partial class CleanupSettingsWindow : Window
         Width = Math.Min(Width, MaxWidth);
         Height = Math.Min(Height, MaxHeight);
 
-        Title = L.T("Очистка распознанной речи", "Speech cleanup");
-        Heading.Text = Title;
-        Intro.Text = L.T("После локального распознавания текст отправляется на выбранный сервер для исправления. Звук не отправляется.",
-            "After local recognition, the text is sent to your chosen server for correction. Audio is not sent.");
-        EnabledBox.Content = L.T("Очищать распознанный текст", "Clean recognized text");
+        Title = L.T("Мозг", "Brain");
+        Heading.Text = L.T("Мозг: правка текста нейросетью", "Brain: AI text cleanup");
+        Intro.Text = L.T("Мозг убирает слова-паразиты, повторы и оговорки и расставляет знаки перед вставкой. Он работает на сервере, который вы укажете: своём или облачном, с OpenAI-совместимым API. Распознавание остаётся на компьютере, звук никуда не уходит, на сервер отправляется только готовый текст.",
+            "The Brain removes filler words, repeats and false starts and fixes punctuation before the text is inserted. It runs on a server you choose, your own or a cloud one, with an OpenAI-compatible API. Recognition stays on this computer and audio never leaves it; only the recognized text is sent.");
+        EnabledBox.Content = L.T("Включить Мозг", "Turn on the Brain");
         UrlLabel.Text = L.T("Адрес сервера (URL)", "Endpoint URL");
         UrlHint.Text = L.T("Адрес OpenAI-совместимого API, например http://127.0.0.1:12345/v1. Путь /chat/completions добавляется автоматически.",
             "OpenAI-compatible API URL, such as http://127.0.0.1:12345/v1. /chat/completions is appended automatically.");
         KeyLabel.Text = L.T("API key (необязательно)", "API key (optional)");
-        KeyHint.Text = L.T("Передаётся как Bearer-токен. Ключ сохраняется в локальном файле настроек.",
-            "Sent as a Bearer token. The key is stored in the local settings file.");
+        KeyHint.Text = L.T("Передаётся как Bearer-токен. Хранится в файле настроек в зашифрованном виде, прочитать его может только ваша учётная запись Windows.",
+            "Sent as a Bearer token. Stored encrypted in the settings file; only your Windows account can read it.");
         ModelLabel.Text = L.T("Модель", "Model");
         RefreshButton.Content = L.T("Обновить", "Refresh");
-        PromptLabel.Text = L.T("Промпт очистки", "Cleanup prompt");
+        PromptLabel.Text = L.T("Инструкция для Мозга", "Instructions for the Brain");
         CancelButton.Content = L.T("Отмена", "Cancel");
         SaveButton.Content = L.T("Сохранить", "Save");
 
@@ -54,6 +54,13 @@ public partial class CleanupSettingsWindow : Window
                 Title, MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+
+        if (EnabledBox.IsChecked == true && SpeechCleanup.IsInsecureRemote(endpoint) &&
+            MessageBox.Show(this,
+                L.T("Адрес начинается с http://, а сервер не на этом компьютере и не в домашней сети. Текст и ключ пойдут по интернету без шифрования. Лучше использовать https://. Всё равно сохранить?",
+                    "The address starts with http:// and the server is neither on this computer nor on your home network. Text and key will cross the internet unencrypted. Prefer https://. Save anyway?"),
+                Title, MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
+            return;
 
         _settings.CleanupEnabled = EnabledBox.IsChecked == true;
         _settings.CleanupEndpointUrl = endpoint;

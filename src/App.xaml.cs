@@ -53,6 +53,8 @@ public partial class PisarApp : Application
             return OverlayDemo();
         if (args.Length >= 2 && args[0] == "--mic-test")
             return MicTest(args[1]);
+        if (args.Length >= 3 && args[0] == "--brain-test")
+            return BrainTest(args[1], args[2]);
         JustUpdated = args.Length >= 1 && args[0] == "--updated";
 
         _instanceMutex = new Mutex(true, "GigaPisar.SingleInstance", out bool first);
@@ -86,6 +88,26 @@ public partial class PisarApp : Application
             Thread.Sleep(2000);
             var samples = rec.StopAsync().GetAwaiter().GetResult();
             File.WriteAllText(outPath, $"backend={rec.Backend} devices={Recorder.DeviceCount} default={Recorder.DefaultDeviceName()} samples={samples.Length} seconds={samples.Length / (double)Recorder.SampleRate:F2} peak={20 * Math.Log10(Math.Max(rec.TakePeak, 1e-9)):F0}dBFS\n");
+            return 0;
+        }
+        catch (Exception e)
+        {
+            File.WriteAllText(outPath, "ERROR: " + e);
+            return 1;
+        }
+    }
+
+    /// <summary>Diagnostics: runs the saved Brain settings on the text of <paramref name="inPath"/>.</summary>
+    private static int BrainTest(string inPath, string outPath)
+    {
+        try
+        {
+            var s = Settings.Load();
+            s.Save();   // rewrites the file, so a plain-text key from the first Brain build gets encrypted
+            var sw = Stopwatch.StartNew();
+            var cleaned = SpeechCleanup.CleanAsync(File.ReadAllText(inPath), s.CleanupEndpointUrl, s.CleanupApiKey,
+                s.CleanupModel, s.CleanupPrompt, CancellationToken.None).GetAwaiter().GetResult();
+            File.WriteAllText(outPath, $"server={SpeechCleanup.HostOf(s.CleanupEndpointUrl)} model={s.CleanupModel} key={(s.CleanupApiKey.Length > 0 ? "set" : "none")} ms={sw.ElapsedMilliseconds}\n{cleaned}\n");
             return 0;
         }
         catch (Exception e)
@@ -335,8 +357,8 @@ public partial class PisarApp : Application
                     Hint(L.T("Это окно запущено от администратора, вставить туда нельзя. Текст лежит в буфере обмена.",
                              "That window runs as administrator; typing into it is blocked. The text is on the clipboard."));
                 else if (cleanupFailed)
-                    Hint(L.T("Сервер очистки недоступен. Вставлен исходный текст.",
-                        "Cleanup server unavailable. Original text inserted."));
+                    Hint(L.T("Мозг не ответил. Вставлен текст без правки.",
+                        "The Brain did not answer. Inserted the text as recognized."));
             }
             else if (samples.Length <= MinTakeSamples || cleanupReturnedEmpty)
             {
@@ -408,6 +430,20 @@ public partial class PisarApp : Application
         menu.Items.Add(hint);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(L.T("Настройки…", "Settings…"), null, (_, _) => ShowSettings());
+        // Visible switch, so it is always clear whether text leaves the computer.
+        var brain = new Forms.ToolStripMenuItem("");
+        brain.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(_settings.CleanupEndpointUrl) || string.IsNullOrWhiteSpace(_settings.CleanupModel))
+            {
+                ShowSettings();
+                return;
+            }
+            _settings.CleanupEnabled = !_settings.CleanupEnabled;
+            ApplySettings();
+            _settingsWindow?.Localize();
+        };
+        menu.Items.Add(brain);
         var autostart = new Forms.ToolStripMenuItem(L.T("Запускать при входе в Windows", "Start when I sign in")) { CheckOnClick = true };
         autostart.Click += (_, _) => Autostart.Set(autostart.Checked);
         menu.Items.Add(autostart);
@@ -430,6 +466,10 @@ public partial class PisarApp : Application
         menu.Opening += (_, _) =>
         {
             autostart.Checked = Autostart.IsEnabled();
+            brain.Checked = _settings.CleanupEnabled;
+            brain.Text = _settings.CleanupEnabled
+                ? L.T($"Мозг: {SpeechCleanup.HostOf(_settings.CleanupEndpointUrl)}", $"Brain: {SpeechCleanup.HostOf(_settings.CleanupEndpointUrl)}")
+                : L.T("Мозг выключен", "Brain off");
             hint.Text = _recognizer == null ? L.T("Модель ещё не загружена", "Model not loaded yet")
                 : L.T($"Зажмите {Settings.HotkeyTitle(_settings.HotkeyVk)} и говорите", $"Hold {Settings.HotkeyTitle(_settings.HotkeyVk)} and speak");
         };

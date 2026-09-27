@@ -1,5 +1,7 @@
 // User settings stored as JSON in %APPDATA%\GigaPisar\settings.json.
 
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -21,7 +23,26 @@ public sealed class Settings
     public bool CheckUpdates { get; set; } = true;
     public bool CleanupEnabled { get; set; }
     public string CleanupEndpointUrl { get; set; } = "";
+    /// <summary>Plain API key in memory only; on disk it lives in <see cref="CleanupApiKeyProtected"/>.</summary>
+    [JsonIgnore]
     public string CleanupApiKey { get; set; } = "";
+
+    /// <summary>API key encrypted with DPAPI for the current Windows user (base64).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CleanupApiKeyProtected
+    {
+        get => CleanupApiKey.Length == 0 ? null : Protect(CleanupApiKey);
+        set => CleanupApiKey = Unprotect(value);
+    }
+
+    /// <summary>Read-only migration of a plain-text key written by the first cleanup build.</summary>
+    [JsonPropertyName("CleanupApiKey")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyCleanupApiKey
+    {
+        get => null;
+        set { if (!string.IsNullOrEmpty(value) && CleanupApiKey.Length == 0) CleanupApiKey = value; }
+    }
     public string CleanupModel { get; set; } = "";
     public string CleanupPrompt { get; set; } = SpeechCleanup.DefaultPrompt;
 
@@ -63,6 +84,26 @@ public sealed class Settings
             File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, JsonOptions));
         }
         catch (Exception e) { Log.Write($"settings save failed: {e.Message}"); }
+    }
+
+    private static readonly byte[] KeyEntropy = Encoding.UTF8.GetBytes("GigaPisar.CleanupApiKey");
+
+    private static string Protect(string plain) =>
+        Convert.ToBase64String(ProtectedData.Protect(Encoding.UTF8.GetBytes(plain), KeyEntropy, DataProtectionScope.CurrentUser));
+
+    private static string Unprotect(string? stored)
+    {
+        if (string.IsNullOrEmpty(stored)) return "";
+        try
+        {
+            return Encoding.UTF8.GetString(ProtectedData.Unprotect(Convert.FromBase64String(stored), KeyEntropy, DataProtectionScope.CurrentUser));
+        }
+        catch (Exception e)
+        {
+            // Another user or machine: the key cannot be recovered, ask for it again.
+            Log.Write($"api key unprotect failed: {e.GetType().Name}");
+            return "";
+        }
     }
 
     public static readonly (int vk, string ru, string en)[] HotkeyChoices =
