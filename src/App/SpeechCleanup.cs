@@ -110,7 +110,24 @@ public static class SpeechCleanup
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(outerToken);
         deadline.CancelAfter(timeout ?? DefaultTimeout);
         var cancellationToken = deadline.Token;
+        try
+        {
+            return await CleanCoreAsync(text, url!, apiKey, model, prompt, extra, cancellationToken);
+        }
+        catch (OperationCanceledException) when (!outerToken.IsCancellationRequested)
+        {
+            throw new BrainException(L.T($"сервер не ответил за {(int)(timeout ?? DefaultTimeout).TotalSeconds} секунд", $"the server did not answer within {(int)(timeout ?? DefaultTimeout).TotalSeconds} seconds"));
+        }
+        catch (HttpRequestException e) when (e.StatusCode == null)
+        {
+            Log.Write($"brain server connection: {e.Message}");
+            throw new BrainException(L.T("нет связи с сервером, проверьте интернет", "cannot reach the server, check the connection"));
+        }
+    }
 
+    private static async Task<string> CleanCoreAsync(string text, Uri url, string apiKey, string model, string prompt,
+        IDictionary<string, object>? extra, CancellationToken cancellationToken)
+    {
         bool withReasoning = _sendReasoningEffort;
         using var response = await PostAsync(url!, apiKey, model, prompt, text, withReasoning, extra, cancellationToken);
         if (withReasoning && response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity)
@@ -156,7 +173,12 @@ public static class SpeechCleanup
 
     private static async Task<string> ReadContentAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            Log.Write($"brain server {(int)response.StatusCode}: {ServerMessage(body)}");
+            throw new BrainException(DescribeFailure((int)response.StatusCode, body));
+        }
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         var cleaned = document.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
@@ -165,6 +187,50 @@ public static class SpeechCleanup
         int think = cleaned.IndexOf("</think>", StringComparison.Ordinal);
         if (think >= 0) cleaned = cleaned[(think + "</think>".Length)..];
         return cleaned.Trim();
+    }
+
+    /// <summary>The error text an OpenAI-style server puts in {"error":{"message":…}} (or {"message":…}).</summary>
+    private static string ServerMessage(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0) root = root[0];
+            if (root.TryGetProperty("error", out var err))
+            {
+                if (err.ValueKind == JsonValueKind.String) return err.GetString() ?? "";
+                if (err.TryGetProperty("message", out var m)) return m.GetString() ?? "";
+            }
+            if (root.TryGetProperty("message", out var msg)) return msg.GetString() ?? "";
+        }
+        catch (JsonException) { }
+        return body.Length > 200 ? body[..200] : body;
+    }
+
+    /// <summary>What went wrong, in words a person can act on (the raw server text goes to the log).</summary>
+    public static string DescribeFailure(int status, string body)
+    {
+        var m = (ServerMessage(body) + " " + body).ToLowerInvariant();
+        if (status == 402 || m.Contains("insufficient_quota") || m.Contains("quota") || m.Contains("billing")
+            || m.Contains("balance") || m.Contains("credit") || m.Contains("payment"))
+            return L.T("на счету сервиса нет денег или не подключена оплата API (это отдельно от подписки вроде ChatGPT Plus)",
+                       "no money on the service account or API billing is not set up (separate from subscriptions like ChatGPT Plus)");
+        if (m.Contains("country") || m.Contains("region") || m.Contains("territory") || m.Contains("location"))
+            return L.T("сервис недоступен из вашей страны", "the service is not available in your country");
+        if (status == 401) return L.T("сервис не принял ключ", "the service rejected the key");
+        if (status == 403) return L.T("у ключа нет доступа к этой модели или сервису", "the key has no access to this model or service");
+        if (status == 404 || (m.Contains("model") && (m.Contains("not found") || m.Contains("does not exist") || m.Contains("not exist"))))
+            return L.T("модель недоступна для этого ключа, выберите другую", "the model is not available for this key, pick another one");
+        if (status == 429) return L.T("слишком много запросов, попробуйте через минуту", "too many requests, try again in a minute");
+        if (status >= 500) return L.T($"у сервиса сбой (ошибка {status}), попробуйте позже", $"the service is failing (error {status}), try later");
+        return L.T($"сервис ответил ошибкой {status}", $"the service answered with error {status}");
+    }
+
+    /// <summary>A tiny real request: a key that lists models may still be unable to chat (no balance, no access).</summary>
+    public static async Task ProbeAsync(string endpoint, string apiKey, string model, CancellationToken ct)
+    {
+        await CleanAsync("ок", endpoint, apiKey, model, "Ответь одним словом: ок", ct, null, TimeSpan.FromSeconds(20));
     }
 
     public static async Task<IReadOnlyList<string>> GetModelsAsync(string endpoint, string apiKey, CancellationToken cancellationToken)

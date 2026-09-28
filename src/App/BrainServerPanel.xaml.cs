@@ -140,7 +140,13 @@ public partial class BrainServerPanel : UserControl
     {
         if (_init) return;
         // SelectionChanged fires before Text follows the new item.
-        Dispatcher.BeginInvoke(TrySave, DispatcherPriority.Background);
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (!TrySave()) return;
+            _loading?.Cancel();
+            _loading = new CancellationTokenSource();
+            _ = ProbeAsync(_loading.Token);
+        }, DispatcherPriority.Background);
     }
 
     private void Refresh_Click(object sender, RoutedEventArgs e) => _ = LoadModelsAsync(pickDefault: ModelBox.Text.Trim().Length == 0);
@@ -169,9 +175,7 @@ public partial class BrainServerPanel : UserControl
             foreach (var m in models) ModelBox.Items.Add(m);
             ModelBox.Text = pickDefault || typed.Length == 0 ? BrainProviders.PickDefault(p, models) ?? "" : typed;
             _init = false;
-            if (TrySave())
-                Status.Text = L.T($"Ключ подошёл, сохранено. Модель {ModelBox.Text}, текст (не звук) уходит на {SpeechCleanup.HostOf(Endpoint)}.",
-                                  $"The key works, saved. Model {ModelBox.Text}; text (not audio) goes to {SpeechCleanup.HostOf(Endpoint)}.");
+            if (TrySave()) await ProbeAsync(cts.Token);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested) { }
         catch (Exception ex)
@@ -194,6 +198,29 @@ public partial class BrainServerPanel : UserControl
         finally
         {
             if (_loading == cts) RefreshButton.IsEnabled = true;
+        }
+    }
+
+    /// <summary>
+    /// Asks the model for one word. A key that lists models may still be unable to chat
+    /// (no API balance, no access to the model, a blocked country): say so right here.
+    /// </summary>
+    private async Task ProbeAsync(CancellationToken ct)
+    {
+        string endpoint = Endpoint, model = ModelBox.Text.Trim(), key = KeyBox.Password.Trim();
+        Status.Text = L.T($"Ключ подошёл, проверяю модель {model}…", $"The key works, checking model {model}…");
+        try
+        {
+            await SpeechCleanup.ProbeAsync(endpoint, key, model, ct);
+            if (ct.IsCancellationRequested) return;
+            Status.Text = L.T($"Всё работает, сохранено. Модель {model}, текст (не звук) уходит на {SpeechCleanup.HostOf(endpoint)}.",
+                              $"All set and saved. Model {model}; text (not audio) goes to {SpeechCleanup.HostOf(endpoint)}.");
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { }
+        catch (Exception e)
+        {
+            Status.Text = L.T($"Ключ принят, но нейросеть не отвечает: {e.Message}.",
+                              $"The key is accepted, but the model does not answer: {e.Message}.");
         }
     }
 
