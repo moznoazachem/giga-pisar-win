@@ -1,8 +1,8 @@
 {
-  "version": "1.0.4",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.4/GigaPisar-Setup.exe",
-  "sha256": "0a8535c75dab8a24a0a9fa03cf6791fc21c16b054169df50a508e2c8e4cf0451",
-  "size": 55031817,
-  "notes": "Настройки по разделам, как в Windows 11: Диктовка, Мозг, Правка выделенного, О программе. Мозг в облаке: выбрал сервис (DeepSeek, OpenRouter, OpenAI и другие), вставил ключ, модель подберётся сама. Правка выделенного: выделил текст, зажал клавишу, сказал «сделай короче» или «переведи на английский», результат встанет на место выделенного, Ctrl+Z вернёт как было. Инструкция Мозга на языке системы и исправления ошибок.",
-  "notes_en": "Settings in sections, like Windows 11: Dictation, Brain, Edit selection, About. Brain in the cloud: pick the service (DeepSeek, OpenRouter, OpenAI and more), paste the key, the model is chosen for you. Edit selection: select text, hold the key, say what to do with it; the result replaces the selection, Ctrl+Z brings it back. Brain instructions in the system language, and bug fixes."
+  "version": "1.0.5",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.5/GigaPisar-Setup.exe",
+  "sha256": "03ebfc928b30f65e0004f5430c20da3e1029bff614e2696b52ee6a933eaac90c",
+  "size": 55029352,
+  "notes": "Мозг: вместо длинного «В облаке или на своём сервере» теперь просто «В облаке». Свой сервер (LM Studio, Ollama) выбирается в списке сервисов.",
+  "notes_en": "Brain: the long \"In the cloud or on your server\" is now simply \"In the cloud\". Your own server (LM Studio, Ollama) is picked in the service list."
 }
