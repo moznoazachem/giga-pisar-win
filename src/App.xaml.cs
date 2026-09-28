@@ -708,7 +708,7 @@ public partial class PisarApp : Application
             brain.Text = _settings.Brain switch
             {
                 BrainSource.Local => L.T("Мозг: на компьютере", "Brain: on this computer"),
-                BrainSource.Server => L.T($"Мозг: {host}", $"Brain: {host}"),
+                BrainSource.Server => L.T($"Мозг: в облаке ({host})", $"Brain: in the cloud ({host})"),
                 _ => L.T("Мозг: выключен", "Brain: off"),
             };
             editSel.Checked = _settings.BrainOnSelection;
@@ -719,10 +719,9 @@ public partial class PisarApp : Application
             brainLocal.Text = LocalBrain.Downloaded
                 ? L.T($"На компьютере ({LocalBrain.ModelTitle})", $"On this computer ({LocalBrain.ModelTitle})")
                 : L.T("На компьютере (скачать 2 ГБ)…", "On this computer (download 2 GB)…");
-            bool own = BrainProviders.FromUrl(_settings.CleanupEndpointUrl).IsCustom;
             brainServer.Text = Brain.ServerConfigured(_settings)
-                ? (own ? L.T($"Свой сервер ({host})", $"Own server ({host})") : L.T($"В облаке ({host})", $"In the cloud ({host})"))
-                : L.T("В облаке или на своём сервере…", "In the cloud or on your server…");
+                ? L.T($"В облаке ({host})", $"In the cloud ({host})")
+                : L.T("В облаке…", "In the cloud…");
             hint.Text = _recognizer == null ? L.T("Модель ещё не загружена", "Model not loaded yet")
                 : L.T($"Зажмите {Settings.HotkeyTitle(_settings.HotkeyVk)} и говорите", $"Hold {Settings.HotkeyTitle(_settings.HotkeyVk)} and speak");
         };

@@ -105,7 +105,7 @@ public partial class SettingsWindow : Window
                                                 : L.T("На компьютере (скачать 2 ГБ)", "On this computer (download 2 GB)"),
                 Tag = BrainSource.Local,
             });
-        BrainBox.Items.Add(new ComboBoxItem { Content = L.T("В облаке или на своём сервере", "In the cloud or on your server"), Tag = BrainSource.Server });
+        BrainBox.Items.Add(new ComboBoxItem { Content = L.T("В облаке", "In the cloud"), Tag = BrainSource.Server });
         foreach (ComboBoxItem it in BrainBox.Items)
             if ((BrainSource)it.Tag == _settings.Brain) BrainBox.SelectedItem = it;
         ServerPanel.Bind(_settings, _apply);
