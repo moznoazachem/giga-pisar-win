@@ -120,10 +120,10 @@ public partial class SettingsWindow : Window
         ExamplesLabel.Text = L.T("Что можно сказать", "What you can say");
         Examples.Text = L.T("«сделай короче»  ·  «исправь ошибки»  ·  «перепиши вежливее»\n«переведи на английский»  ·  «сделай списком»  ·  «добавь заголовок»",
                             "\"make it shorter\"  ·  \"fix the mistakes\"  ·  \"make it more polite\"\n\"translate into English\"  ·  \"make it a list\"  ·  \"add a title\"\n(said in Russian)");
-        EveryTakeBox.Content = L.T("Править каждую диктовку, без команды", "Edit every take, without a command");
+        EveryTakeBox.Content = L.T("Править на лету", "Edit on the fly");
         EveryTakeBox.IsChecked = _settings.BrainEveryTake;
-        EveryTakeHint.Text = L.T("Удобно с быстрым облачным сервисом: нейросеть причёсывает всё подряд.",
-                                 "Handy with a fast cloud service: the model tidies up everything.");
+        EveryTakeHint.Text = L.T("Нейросеть причёсывает каждую диктовку сама, без команды «Писарь, …». Удобно с быстрым облачным сервисом.",
+                                 "The model tidies every take by itself, no \"Pisar, …\" needed. Handy with a fast cloud service.");
         PromptExpander.Header = L.T("Инструкция для этого режима", "Instructions for this mode");
         PromptBox.Text = _settings.EffectiveCleanupPrompt;
         UpdateBrainTexts();

@@ -23,7 +23,7 @@ alternative in Settings.
   and so on; without the address the text is inserted at once and no model
   sees it. With text selected when you press the key, what you say becomes a
   command on that selection and the answer replaces it (Ctrl+Z brings the
-  original back); "Commands on selected text" turns this off. "Edit every take"
+  original back); "Commands on selected text" turns this off. "Edit on the fly"
   sends every dictation through the Brain.
   - **In the cloud or on your own server**: pick the service (DeepSeek,
     OpenRouter, OpenAI, Groq, Gemini, Anthropic) and paste the key in
