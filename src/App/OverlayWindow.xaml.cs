@@ -94,6 +94,7 @@ public partial class OverlayWindow : Window
         _busyRipple = false;
         ApplyTheme();
         Label.Visibility = Visibility.Collapsed;
+        Caption.Visibility = Visibility.Collapsed;
         Bars.Visibility = Visibility.Visible;
         Resize(BarsWidth);
         Array.Clear(_heights);
@@ -132,6 +133,27 @@ public partial class OverlayWindow : Window
         if (mine == _hintSerial && _recorder == null && !_demo) Hide();
     }
 
+    /// <summary>
+    /// A short caption next to the wave while listening, e.g. "120 characters selected. Say what to do",
+    /// as the macOS app shows. The wave keeps moving; the caption goes away by itself.
+    /// </summary>
+    public async void ShowCaption(string text, int ms = 2500)
+    {
+        if (_recorder == null && !_demo) return;   // only while listening
+        int mine = ++_captionSerial;
+        Caption.Foreground = Label.Foreground;
+        Caption.Text = text;
+        Caption.Visibility = Visibility.Visible;
+        Caption.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Resize(Math.Ceiling(Caption.DesiredSize.Width) + 10 + BarsWidth);
+        await Task.Delay(ms);
+        if (mine != _captionSerial || Caption.Visibility != Visibility.Visible || Bars.Visibility != Visibility.Visible) return;
+        Caption.Visibility = Visibility.Collapsed;
+        Resize(BarsWidth);
+    }
+
+    private int _captionSerial;
+
     /// <summary>Shows a message that stays until the next state, e.g. "Starting the Brain… 12s".</summary>
     public void ShowStatus(string text)
     {
@@ -141,6 +163,8 @@ public partial class OverlayWindow : Window
 
     private void ShowText(string text)
     {
+        _captionSerial++;
+        Caption.Visibility = Visibility.Collapsed;
         _timer.Stop();
         _recorder = null;
         _busyRipple = false;

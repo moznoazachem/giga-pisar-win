@@ -389,10 +389,22 @@ public partial class PisarApp : Application
 
     // ── push-to-talk ─────────────────────────────────────────────
 
+    /// <summary>As on macOS: once the selection is read, say how much is selected and what to do.</summary>
+    private async Task HintSelectionAsync(Task<string?> read)
+    {
+        var selected = await read;
+        if (selected == null || !_recorder.IsRecording) return;
+        string text = L.T($"Выделено {selected.Length} знаков. Скажите, что с ними сделать",
+                          $"{selected.Length} characters selected. Say what to do with them");
+        if (_settings.ShowOverlay) _overlay?.ShowCaption(text);
+        else _tray?.ShowBalloonTip(2500, L.T("Гига Писарь", "Giga Pisar"), text, Forms.ToolTipIcon.None);
+    }
+
     private async Task HandlePressAsync()
     {
         if (_busy || _recognizer == null || _recorder.IsRecording) return;
         _selectionAtPress = BrainUsable && _settings.BrainOnSelection ? SelectionReader.TryGetAsync() : null;
+        if (_selectionAtPress != null) _ = HintSelectionAsync(_selectionAtPress);
         try
         {
             await _recorder.StartAsync();
@@ -437,6 +449,7 @@ public partial class PisarApp : Application
 
             string text = "";
             string? brainFailure = null;
+            bool editedSelection = false;
             if (!silent && samples.Length > MinTakeSamples)
             {
                 if (_settings.KeepLastRecording)
@@ -466,6 +479,7 @@ public partial class PisarApp : Application
                         return;   // never paste the spoken command over the user's text
                     }
                     text = answer;
+                    editedSelection = true;
                 }
                 else if (text.Length > 0 && BrainUsable)
                 {
@@ -493,6 +507,8 @@ public partial class PisarApp : Application
                 else if (brainFailure != null)
                     Hint(L.T($"Мозг не справился: {brainFailure}. Вставлен текст без правки.",
                              $"The Brain failed: {brainFailure}. Inserted the text as recognized."));
+                else if (editedSelection)
+                    Hint(L.T("Готово. Вернуть как было: Ctrl+Z", "Done. Undo with Ctrl+Z"));
             }
             else if (samples.Length <= MinTakeSamples)
             {

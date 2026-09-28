@@ -108,6 +108,45 @@ public static class TextInserter
         return InsertResult.Done;
     }
 
+    /// <summary>
+    /// Fallback for apps that do not tell UI Automation what is selected: presses Ctrl+C, reads the copied
+    /// text and puts the previous clipboard back. Returns null when nothing was selected (the clipboard did
+    /// not change). Call from a worker thread.
+    /// </summary>
+    public static string? CopySelection()
+    {
+        var ui = Application.Current.Dispatcher;
+        IDataObject? saved = ui.Invoke(Snapshot);
+        uint before = Native.GetClipboardSequenceNumber();
+        if (!Send(new[]
+            {
+                Key(Native.VK_CONTROL, 0, 0),
+                Key(Native.VK_C, 0, 0),
+                Key(Native.VK_C, 0, Native.KEYEVENTF_KEYUP),
+                Key(Native.VK_CONTROL, 0, Native.KEYEVENTF_KEYUP),
+            }))
+            return null;
+
+        // The app copies asynchronously; a change of the clipboard sequence number means it did.
+        var deadline = DateTime.UtcNow.AddMilliseconds(400);
+        while (Native.GetClipboardSequenceNumber() == before && DateTime.UtcNow < deadline) Thread.Sleep(15);
+        if (Native.GetClipboardSequenceNumber() == before) return null;
+
+        return ui.Invoke(() =>
+        {
+            string? text = null;
+            try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); }
+            catch (Exception e) { Log.Write($"clipboard read failed: {e.Message}"); }
+            try
+            {
+                if (saved != null) Clipboard.SetDataObject(saved, true);
+                else Clipboard.Clear();
+            }
+            catch (Exception e) { Log.Write($"clipboard restore failed: {e.Message}"); }
+            return string.IsNullOrWhiteSpace(text) ? null : text;
+        });
+    }
+
     /// <summary>Deep copy of the current clipboard: the live object belongs to another app and dies when we replace it.</summary>
     private static IDataObject? Snapshot()
     {

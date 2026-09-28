@@ -24,6 +24,9 @@ internal static class Native
     public const uint KEYEVENTF_UNICODE = 0x0004;
     public const ushort VK_CONTROL = 0x11;
     public const ushort VK_V = 0x56;
+    public const ushort VK_C = 0x43;
+    [DllImport("user32.dll")]
+    public static extern uint GetClipboardSequenceNumber();
     public const ushort VK_RETURN = 0x0D;
     public const uint WM_QUIT = 0x0012;
 

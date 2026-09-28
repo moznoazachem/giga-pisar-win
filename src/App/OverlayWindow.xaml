@@ -15,7 +15,11 @@
             <DropShadowEffect BlurRadius="14" ShadowDepth="1" Direction="270" Opacity="0.20" Color="#000000"/>
         </Border.Effect>
         <Grid>
-            <StackPanel x:Name="Bars" Orientation="Horizontal" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="Caption" Visibility="Collapsed" Margin="0,0,10,0" VerticalAlignment="Center"
+                           FontSize="12.5" FontFamily="Segoe UI Variable Text, Segoe UI"/>
+                <StackPanel x:Name="Bars" Orientation="Horizontal" Height="22" VerticalAlignment="Center"/>
+            </StackPanel>
             <TextBlock x:Name="Label" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"
                        Foreground="#D9000000" FontSize="12.5" FontFamily="Segoe UI Variable Text, Segoe UI"/>
         </Grid>

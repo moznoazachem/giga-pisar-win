@@ -81,6 +81,23 @@ public static partial class Brain
         SpeechCleanup.TryGetCompletionsUrl(endpoint, out _) && model.Trim().Length > 0
         && (BrainProviders.FromUrl(endpoint).IsCustom || key.Trim().Length > 0);
 
+    /// <summary>
+    /// A cleanup that talks about itself instead of returning the text ("I can't help with that",
+    /// "the text you've given me is…") must not land in the user's document.
+    /// </summary>
+    private static readonly string[] RefusalMarkers =
+    [
+        "i can't", "i cannot", "i can not", "i won't", "as an ai", "i'm sorry", "i am sorry", "transcript",
+        "не могу", "я не буду", "извините", "расшифровк", "как ии", "как языковая модель",
+    ];
+
+    private static bool LooksLikeRefusal(string answer, string body)
+    {
+        var a = answer.ToLowerInvariant();
+        var b = body.ToLowerInvariant();
+        return RefusalMarkers.Any(m => a.Contains(m) && !b.Contains(m));
+    }
+
     /// <summary>A sane answer is about as long as the text; anything far longer is not a cleanup and is not typed in.</summary>
     private static void CheckLength(string answer, string body)
     {
@@ -115,6 +132,8 @@ public static partial class Brain
             var local = await SpeechCleanup.CleanAsync(body, LocalBrain.EndpointUrl, LocalBrain.ApiKey, "local", prompt, ct,
                 extra, TimeSpan.FromSeconds(120));
             CheckLength(local, body);
+            if (command == null && LooksLikeRefusal(local, body))
+                throw new BrainException(L.T("нейросеть ответила не по делу", "the model answered off the point"));
             return local;
         }
 
@@ -122,6 +141,8 @@ public static partial class Brain
         // No max_tokens here: newer OpenAI models reject it. The length check below guards instead.
         var answer = await SpeechCleanup.CleanAsync(body, s.CleanupEndpointUrl, s.CleanupApiKey, s.CleanupModel, prompt, ct);
         CheckLength(answer, body);
+        if (command == null && LooksLikeRefusal(answer, body))
+            throw new BrainException(L.T("нейросеть ответила не по делу", "the model answered off the point"));
         return answer;
     }
 }
