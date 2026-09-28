@@ -1,8 +1,8 @@
 {
-  "version": "1.0.3",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.3/GigaPisar-Setup.exe",
-  "sha256": "65461bd40f488916e6de5ea013ece942d4d3e2b1ffc38278e9019ffe8318f96d",
-  "size": 54991217,
-  "notes": "Мозг: по желанию нейросеть убирает слова-паразиты и правит текст перед вставкой. Работает через ваш сервер или облачную нейросеть с OpenAI-совместимым API, звук никуда не уходит. По умолчанию выключен, включается в Настройках. Новая клавиша на выбор: левый Ctrl + Win. Спасибо pkochubey за пулреквест.",
-  "notes_en": "Brain: optionally, an AI model removes filler words and tidies the text before insertion. Works through your own server or a cloud model with an OpenAI-compatible API; audio never leaves the computer. Off by default, turn it on in Settings. New key option: left Ctrl + Win. Thanks to pkochubey for the pull request."
+  "version": "1.0.4",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.4/GigaPisar-Setup.exe",
+  "sha256": "0a8535c75dab8a24a0a9fa03cf6791fc21c16b054169df50a508e2c8e4cf0451",
+  "size": 55031817,
+  "notes": "Настройки по разделам, как в Windows 11: Диктовка, Мозг, Правка выделенного, О программе. Мозг в облаке: выбрал сервис (DeepSeek, OpenRouter, OpenAI и другие), вставил ключ, модель подберётся сама. Правка выделенного: выделил текст, зажал клавишу, сказал «сделай короче» или «переведи на английский», результат встанет на место выделенного, Ctrl+Z вернёт как было. Инструкция Мозга на языке системы и исправления ошибок.",
+  "notes_en": "Settings in sections, like Windows 11: Dictation, Brain, Edit selection, About. Brain in the cloud: pick the service (DeepSeek, OpenRouter, OpenAI and more), paste the key, the model is chosen for you. Edit selection: select text, hold the key, say what to do with it; the result replaces the selection, Ctrl+Z brings it back. Brain instructions in the system language, and bug fixes."
 }
