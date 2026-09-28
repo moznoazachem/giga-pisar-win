@@ -1,8 +1,8 @@
 {
-  "version": "1.0.5",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.5/GigaPisar-Setup.exe",
-  "sha256": "03ebfc928b30f65e0004f5430c20da3e1029bff614e2696b52ee6a933eaac90c",
-  "size": 55029352,
-  "notes": "Мозг: вместо длинного «В облаке или на своём сервере» теперь просто «В облаке». Свой сервер (LM Studio, Ollama) выбирается в списке сервисов.",
-  "notes_en": "Brain: the long \"In the cloud or on your server\" is now simply \"In the cloud\". Your own server (LM Studio, Ollama) is picked in the service list."
+  "version": "1.0.6",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.6/GigaPisar-Setup.exe",
+  "sha256": "009bd77c1ef6dc2db18ad8fdceab22ce60a75b2ddc5afe460cbac621c8230b8b",
+  "size": 55026159,
+  "notes": "Мозг в облаке: если нейросеть не отвечает, Писарь пишет причину (нет денег на счету API, сервис недоступен из страны, ключ не принят, модель недоступна). При настройке модель проверяется пробным запросом: «всё работает» значит, что нейросеть правда отвечает.",
+  "notes_en": "Cloud Brain: when the model fails, Pisar says why (no API balance, service unavailable in your country, key rejected, model unavailable). Setup checks the model with a test request, so \"all set\" means it really answers."
 }
