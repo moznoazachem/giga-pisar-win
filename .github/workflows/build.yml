@@ -1,0 +1,50 @@
+# Builds the installer on GitHub's Windows runners, from the source in this repository only,
+# so anyone can see how GigaPisar-Setup.exe is made. Runs on every version tag and by hand.
+name: Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish the app
+        run: dotnet publish src/GigaPisar.csproj -c Release -r win-x64 --self-contained true -o dist/app -nologo
+
+      # onnxruntime.dll needs the Visual C++ runtime, which a clean Windows 10 lacks.
+      # Microsoft allows shipping these files next to an application.
+      - name: Bundle the Visual C++ runtime
+        shell: pwsh
+        run: |
+          foreach ($dll in 'msvcp140.dll', 'msvcp140_1.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
+            Copy-Item "$env:WINDIR\System32\$dll" dist/app/
+          }
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the installer
+        shell: pwsh
+        run: '& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" /Q installer\setup.iss'
+
+      - name: Checksum
+        shell: pwsh
+        run: (Get-FileHash dist/GigaPisar-Setup.exe -Algorithm SHA256).Hash
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GigaPisar-Setup
+          path: dist/GigaPisar-Setup.exe
+          if-no-files-found: error

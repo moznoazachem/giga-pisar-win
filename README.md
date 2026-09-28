@@ -68,7 +68,11 @@ alternative in Settings.
 
 ## Build
 
-Requires the .NET 10 SDK and Inno Setup 6 on Windows.
+Release installers are built by GitHub Actions on GitHub's Windows runners,
+from this repository only: see [`.github/workflows/build.yml`](.github/workflows/build.yml)
+and the build logs under Actions. Every build prints the installer's SHA-256.
+
+To build locally you need the .NET 10 SDK and Inno Setup 6 on Windows.
 
 ```
 cd src
@@ -86,6 +90,45 @@ GigaPisar.exe --transcribe input.wav result.txt
 
 `PISAR_MODEL_DIR` is honoured by this headless mode only; the tray app always
 uses `%LOCALAPPDATA%\GigaPisar\model`.
+
+## Code signing policy
+
+Release installers are to be signed through SignPath Foundation (application
+in progress; this section will name the certificate once signing is active).
+
+- Only installers built by the GitHub Actions workflow above, from a tagged
+  commit of this repository, are submitted for signing; nothing built on a
+  personal machine is signed.
+- Every signing request is approved by hand before the signed installer is
+  published.
+
+Team roles:
+
+- Authors, committers and reviewers: [@moznoazachem](https://github.com/moznoazachem).
+  Changes from anyone else come as pull requests and are reviewed before merge.
+- Approver of releases: [@moznoazachem](https://github.com/moznoazachem).
+
+All team members use multi-factor authentication on GitHub.
+
+## Privacy
+
+Giga Pisar collects no telemetry and sends nothing about you or your speech
+anywhere on its own. Speech is recognized on your computer; audio never
+leaves it. The only network traffic:
+
+- the one-time download of the speech model from this project's GitHub
+  releases;
+- an update check against `update.json` in this repository every few hours,
+  which can be turned off in Settings;
+- only if you turn on the Brain in the cloud: the recognized text (or the
+  selected text, for a command on a selection) goes to the service you chose,
+  under that service's own privacy policy (for example
+  [DeepSeek](https://platform.deepseek.com/downloads/DeepSeek%20Open%20Platform%20Privacy%20Policy.html),
+  [OpenAI](https://openai.com/policies/privacy-policy/),
+  [OpenRouter](https://openrouter.ai/privacy)). The Brain is off by default.
+
+Settings and the log stay in your user profile and are removed by the
+uninstaller.
 
 ## License
 
