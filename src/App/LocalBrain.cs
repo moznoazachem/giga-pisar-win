@@ -20,10 +20,10 @@ namespace GigaPisar.App;
 public static class LocalBrain
 {
     /// <summary>
-    /// Whether "on this computer" is offered in the menus. Off until its own release
-    /// (with the model mirror on GitHub); someone who already chose it keeps seeing it.
+    /// Whether "on this computer" is offered in the menus. On since 1.0.7, when the model got
+    /// its mirror on GitHub (the brain-models release): from Russia Hugging Face crawls.
     /// </summary>
-    public const bool Offered = false;
+    public const bool Offered = true;
 
     public const string EngineTag = "b10701";
     private const string EngineUrl = "https://github.com/ggml-org/llama.cpp/releases/download/b10701/llama-b10701-bin-win-cpu-x64.zip";

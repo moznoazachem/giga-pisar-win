@@ -76,8 +76,14 @@ public sealed class Recorder : IDisposable
         catch { return L.T("не найден", "none found"); }
     }
 
+    private DateTime _lastStop = DateTime.MinValue;
+
+    /// <summary>Milliseconds between the previous take's stop and this start (diagnostics for quick re-presses).</summary>
+    public double GapMs { get; private set; }
+
     public Task StartAsync()
     {
+        GapMs = _lastStop == DateTime.MinValue ? -1 : (DateTime.UtcNow - _lastStop).TotalMilliseconds;
         lock (_gate) { _samples.Clear(); _levelSinceRead = 0; _takePeak = 0; _capHit = false; _noiseDb = double.NaN; _peakDb = double.NaN; }
         var stopped = new ManualResetEventSlim(false);
         _stopped = stopped;
@@ -239,6 +245,7 @@ public sealed class Recorder : IDisposable
                 _wasapiBuffer = null;
                 _wasapiResampled = null;
             }
+            _lastStop = DateTime.UtcNow;
             lock (_gate)
             {
                 var result = _samples.ToArray();

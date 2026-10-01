@@ -205,8 +205,8 @@ public partial class SettingsWindow : Window
         var b = _settings.Brain;
         BrainStatus.Text = b switch
         {
-            BrainSource.Local => L.T("Работает без интернета. Пока нужен, занимает около 2,5 ГБ памяти, через 15 минут без дела выгружается.",
-                                     "Works offline. Takes about 2.5 GB of memory while needed, unloads after 15 idle minutes."),
+            BrainSource.Local => L.T("Работает без интернета и без ключей. Медленнее облака: фраза правится за несколько секунд, на обычном ноутбуке дольше. Пока нужен, занимает около 2,5 ГБ памяти, через 15 минут без дела выгружается.",
+                                     "Works offline, no keys. Slower than the cloud: a phrase takes a few seconds, longer on an ordinary laptop. Takes about 2.5 GB of memory while needed, unloads after 15 idle minutes."),
             BrainSource.Off => L.T("Текст вставляется как распознан.", "Text is inserted as recognized."),
             _ => "",
         };

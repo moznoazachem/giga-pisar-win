@@ -430,6 +430,19 @@ public partial class PisarApp : Application
         }
     }
 
+    /// <summary>Peaks of 0–0.5 s, 0.5–1 s and the rest, in dBFS: shows whether a quick re-press loses the start of a take.</summary>
+    private static string PartPeaks(float[] samples)
+    {
+        int half = Recorder.SampleRate / 2;
+        static string Db(float[] a, int from, int to)
+        {
+            float p = 0;
+            for (int i = Math.Max(0, from); i < Math.Min(a.Length, to); i++) p = Math.Max(p, Math.Abs(a[i]));
+            return p == 0 ? "-" : (20 * Math.Log10(p)).ToString("F0");
+        }
+        return $"{Db(samples, 0, half)}/{Db(samples, half, 2 * half)}/{Db(samples, 2 * half, samples.Length)}";
+    }
+
     private async Task HandleReleaseAsync()
     {
         if (!_recorder.IsRecording || _busy) return;
@@ -445,7 +458,8 @@ public partial class PisarApp : Application
             // test (a line-level receiver on a mic jack sits 50 dB down), so we look for speech
             // dynamics: loud stretches well above the quiet ones.
             bool silent = peak < SilenceFloor || !HasSpeechDynamics(samples);
-            Log.Write($"take {samples.Length / (double)Recorder.SampleRate:F1}s peak {20 * Math.Log10(Math.Max(peak, 1e-9)):F0} dBFS silent={silent}");
+            Log.Write($"take {samples.Length / (double)Recorder.SampleRate:F1}s peak {20 * Math.Log10(Math.Max(peak, 1e-9)):F0} dBFS silent={silent}"
+                      + $" gap {_recorder.GapMs:F0}ms via {_recorder.Backend} parts {PartPeaks(samples)}");
 
             string text = "";
             string? brainFailure = null;
@@ -500,7 +514,13 @@ public partial class PisarApp : Application
 
             // Simple syntax is for dictation only: a Brain answer to a command or an edited selection goes in as is.
             if (text.Length > 0 && _settings.SimpleSyntax && !editedSelection && !brainCommand)
-                text = SimpleSyntax.Apply(text);
+            {
+                var simple = SimpleSyntax.Apply(text);
+                Log.Write($"simple syntax: {(simple == text ? "unchanged" : "applied")}, {text.Length} chars");
+                text = simple;
+            }
+            else if (text.Length > 0)
+                Log.Write($"insert as is: simple={_settings.SimpleSyntax} selection={editedSelection} command={brainCommand}");
 
             if (text.Length > 0)
             {
