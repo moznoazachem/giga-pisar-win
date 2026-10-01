@@ -1,8 +1,8 @@
 {
-  "version": "1.0.6",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.6/GigaPisar-Setup.exe",
-  "sha256": "009bd77c1ef6dc2db18ad8fdceab22ce60a75b2ddc5afe460cbac621c8230b8b",
-  "size": 55026159,
-  "notes": "Мозг в облаке: если нейросеть не отвечает, Писарь пишет причину (нет денег на счету API, сервис недоступен из страны, ключ не принят, модель недоступна). При настройке модель проверяется пробным запросом: «всё работает» значит, что нейросеть правда отвечает.",
-  "notes_en": "Cloud Brain: when the model fails, Pisar says why (no API balance, service unavailable in your country, key rejected, model unavailable). Setup checks the model with a test request, so \"all set\" means it really answers."
+  "version": "1.0.7",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.7/GigaPisar-Setup.exe",
+  "sha256": "cf5860635101ae51f07225a2a1a1da9f124668da2d8089a1271fa7fb24d9d7f0",
+  "size": 55027426,
+  "notes": "Мозг прямо на компьютере: модель Qwen (2 ГБ) скачивается с GitHub за несколько минут и работает без интернета и без ключей. Упрощённый синтаксис: одно предложение вставляется со строчной буквы и без точки, галочка во вкладке «Диктовка». У каждого облачного сервиса свой ключ: переключился на другой и вернулся, ключ на месте. Можно диктовать фразу за фразой, не дожидаясь паузы после вставки (спасибо pkochubey). «Править каждую диктовку» теперь называется «Править на лету», как на маке.",
+  "notes_en": "The Brain on this computer: the Qwen model (2 GB) downloads from GitHub in a few minutes and works offline, no keys needed. Simplify punctuation: a single sentence goes in lowercase and without a period, a checkbox on the Dictation tab. Every cloud service keeps its own key: switch away and back, the key is still there. Dictate phrase after phrase without waiting after each insert (thanks to pkochubey). \"Edit every take\" is now \"Edit on the fly\", as on macOS."
 }
