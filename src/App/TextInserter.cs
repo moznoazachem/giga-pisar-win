@@ -11,6 +11,7 @@
 
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace GigaPisar.App;
 
@@ -22,11 +23,12 @@ public static class TextInserter
     private const int BatchPauseMs = 8;
     private const int ClipboardRestoreDelayMs = 800;
     private const int ErrorAccessDenied = 5;
+    private static readonly SemaphoreSlim ClipboardGate = new(1, 1);
 
-    public static InsertResult Insert(string text, InsertMode mode)
+    public static InsertResult Insert(string text, InsertMode mode, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(text)) return InsertResult.Done;
-        return mode == InsertMode.Paste ? Paste(text) : Type(text);
+        return mode == InsertMode.Paste ? Paste(text, cancellationToken) : Type(text);
     }
 
     public static InsertResult Type(string text)
@@ -55,57 +57,87 @@ public static class TextInserter
         return InsertResult.Done;
     }
 
-    public static InsertResult Paste(string text)
+    public static InsertResult Paste(string text, CancellationToken cancellationToken = default)
     {
-        var ui = Application.Current.Dispatcher;
-        IDataObject? saved = ui.Invoke(Snapshot);
-
-        bool placed = ui.Invoke(() =>
+        ClipboardGate.Wait(cancellationToken);
+        bool restoreOwnsGate = false;
+        try
         {
-            try
-            {
-                var data = new DataObject();
-                data.SetData(DataFormats.UnicodeText, text);
-                // Windows honours these formats: no Clipboard History entry, no cloud sync.
-                data.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(new byte[4]));
-                data.SetData("CanIncludeInClipboardHistory", new MemoryStream(new byte[4]));
-                data.SetData("CanUploadToCloudClipboard", new MemoryStream(new byte[4]));
-                Clipboard.SetDataObject(data, true);
-                return true;
-            }
-            catch (Exception e)
-            {
-                Log.Write($"clipboard set failed, typing instead: {e.Message}");
-                return false;
-            }
-        });
-        if (!placed) return Type(text);
+            var ui = Application.Current.Dispatcher;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (ui.HasShutdownStarted || ui.HasShutdownFinished) return InsertResult.Blocked;
+            IDataObject? saved = null;
+            uint sequence = 0;
 
-        var ok = Send(new[]
-        {
-            Key(Native.VK_CONTROL, 0, 0),
-            Key(Native.VK_V, 0, 0),
-            Key(Native.VK_V, 0, Native.KEYEVENTF_KEYUP),
-            Key(Native.VK_CONTROL, 0, Native.KEYEVENTF_KEYUP),
-        });
-        if (!ok) return InsertResult.Blocked;   // our text stays on the clipboard so the user can paste by hand
-
-        if (saved != null)
-        {
-            // Give the target app time to read the clipboard, then put the old content back,
-            // but only if nobody (including the user) has changed the clipboard meanwhile.
-            Thread.Sleep(ClipboardRestoreDelayMs);
-            ui.Invoke(() =>
+            bool placed = ui.Invoke(() =>
             {
+                saved = Snapshot();
                 try
                 {
-                    if (Clipboard.ContainsText() && Clipboard.GetText() == text)
-                        Clipboard.SetDataObject(saved, true);
+                    var data = new DataObject();
+                    data.SetData(DataFormats.UnicodeText, text);
+                    // Windows honours these formats: no Clipboard History entry, no cloud sync.
+                    data.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(new byte[4]));
+                    data.SetData("CanIncludeInClipboardHistory", new MemoryStream(new byte[4]));
+                    data.SetData("CanUploadToCloudClipboard", new MemoryStream(new byte[4]));
+                    Clipboard.SetDataObject(data, true);
+                    sequence = Native.GetClipboardSequenceNumber();
+                    return true;
                 }
-                catch (Exception e) { Log.Write($"clipboard restore failed: {e.Message}"); }
+                catch (Exception e)
+                {
+                    Log.Write($"clipboard set failed, typing instead: {e.Message}");
+                    return false;
+                }
             });
+            if (!placed) return Type(text);
+
+            var ok = Send(new[]
+            {
+                Key(Native.VK_CONTROL, 0, 0),
+                Key(Native.VK_V, 0, 0),
+                Key(Native.VK_V, 0, Native.KEYEVENTF_KEYUP),
+                Key(Native.VK_CONTROL, 0, Native.KEYEVENTF_KEYUP),
+            });
+            if (!ok) return InsertResult.Blocked;   // our text stays on the clipboard so the user can paste by hand
+
+            // Recording may resume as soon as Ctrl+V is sent. Keep clipboard operations serialized
+            // until the target has had time to read it, even when there is no snapshot to restore.
+            restoreOwnsGate = true;
+            _ = RestoreClipboardAsync(ui, saved, sequence, cancellationToken);
+            return InsertResult.Done;
         }
-        return InsertResult.Done;
+        finally
+        {
+            if (!restoreOwnsGate) ClipboardGate.Release();
+        }
+    }
+
+    private static async Task RestoreClipboardAsync(Dispatcher ui, IDataObject? saved, uint sequence,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(ClipboardRestoreDelayMs, cancellationToken).ConfigureAwait(false);
+            if (saved == null || sequence == 0 || ui.HasShutdownStarted || ui.HasShutdownFinished) return;
+            await ui.InvokeAsync(() =>
+            {
+                if (cancellationToken.IsCancellationRequested || ui.HasShutdownStarted) return;
+                if (Native.GetClipboardSequenceNumber() == sequence)
+                    Clipboard.SetDataObject(saved, true);
+            }, DispatcherPriority.Normal, cancellationToken).Task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || ui.HasShutdownStarted)
+        {
+        }
+        catch (Exception e)
+        {
+            Log.Write($"clipboard restore failed: {e.Message}");
+        }
+        finally
+        {
+            ClipboardGate.Release();
+        }
     }
 
     /// <summary>
@@ -113,38 +145,59 @@ public static class TextInserter
     /// text and puts the previous clipboard back. Returns null when nothing was selected (the clipboard did
     /// not change). Call from a worker thread.
     /// </summary>
-    public static string? CopySelection()
+    public static string? CopySelection(CancellationToken cancellationToken = default)
     {
-        var ui = Application.Current.Dispatcher;
-        IDataObject? saved = ui.Invoke(Snapshot);
-        uint before = Native.GetClipboardSequenceNumber();
-        if (!Send(new[]
-            {
-                Key(Native.VK_CONTROL, 0, 0),
-                Key(Native.VK_C, 0, 0),
-                Key(Native.VK_C, 0, Native.KEYEVENTF_KEYUP),
-                Key(Native.VK_CONTROL, 0, Native.KEYEVENTF_KEYUP),
-            }))
-            return null;
-
-        // The app copies asynchronously; a change of the clipboard sequence number means it did.
-        var deadline = DateTime.UtcNow.AddMilliseconds(400);
-        while (Native.GetClipboardSequenceNumber() == before && DateTime.UtcNow < deadline) Thread.Sleep(15);
-        if (Native.GetClipboardSequenceNumber() == before) return null;
-
-        return ui.Invoke(() =>
+        try
         {
-            string? text = null;
-            try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); }
-            catch (Exception e) { Log.Write($"clipboard read failed: {e.Message}"); }
-            try
+            ClipboardGate.Wait(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        try
+        {
+            var ui = Application.Current.Dispatcher;
+            if (cancellationToken.IsCancellationRequested || ui.HasShutdownStarted || ui.HasShutdownFinished) return null;
+            IDataObject? saved = ui.Invoke(Snapshot);
+            uint before = Native.GetClipboardSequenceNumber();
+            if (!Send(new[]
+                {
+                    Key(Native.VK_CONTROL, 0, 0),
+                    Key(Native.VK_C, 0, 0),
+                    Key(Native.VK_C, 0, Native.KEYEVENTF_KEYUP),
+                    Key(Native.VK_CONTROL, 0, Native.KEYEVENTF_KEYUP),
+                }))
+                return null;
+
+            // The app copies asynchronously; a change of the clipboard sequence number means it did.
+            var deadline = DateTime.UtcNow.AddMilliseconds(400);
+            while (Native.GetClipboardSequenceNumber() == before && DateTime.UtcNow < deadline)
             {
-                if (saved != null) Clipboard.SetDataObject(saved, true);
-                else Clipboard.Clear();
+                if (cancellationToken.IsCancellationRequested) return null;
+                Thread.Sleep(15);
             }
-            catch (Exception e) { Log.Write($"clipboard restore failed: {e.Message}"); }
-            return string.IsNullOrWhiteSpace(text) ? null : text;
-        });
+            if (Native.GetClipboardSequenceNumber() == before) return null;
+            if (cancellationToken.IsCancellationRequested || ui.HasShutdownStarted || ui.HasShutdownFinished) return null;
+
+            return ui.Invoke(() =>
+            {
+                string? text = null;
+                try { if (Clipboard.ContainsText()) text = Clipboard.GetText(); }
+                catch (Exception e) { Log.Write($"clipboard read failed: {e.Message}"); }
+                try
+                {
+                    if (saved != null) Clipboard.SetDataObject(saved, true);
+                    else Clipboard.Clear();
+                }
+                catch (Exception e) { Log.Write($"clipboard restore failed: {e.Message}"); }
+                return string.IsNullOrWhiteSpace(text) ? null : text;
+            });
+        }
+        finally
+        {
+            ClipboardGate.Release();
+        }
     }
 
     /// <summary>Deep copy of the current clipboard: the live object belongs to another app and dies when we replace it.</summary>

@@ -403,7 +403,7 @@ public partial class PisarApp : Application
     private async Task HandlePressAsync()
     {
         if (_busy || _recognizer == null || _recorder.IsRecording) return;
-        _selectionAtPress = BrainUsable && _settings.BrainOnSelection ? SelectionReader.TryGetAsync() : null;
+        _selectionAtPress = BrainUsable && _settings.BrainOnSelection ? SelectionReader.TryGetAsync(_lifetime.Token) : null;
         if (_selectionAtPress != null) _ = HintSelectionAsync(_selectionAtPress);
         try
         {
@@ -500,7 +500,7 @@ public partial class PisarApp : Application
             {
                 overlay?.HideNow();
                 var mode = _settings.InsertMode;
-                var result = await Task.Run(() => TextInserter.Insert(text, mode));
+                var result = await Task.Run(() => TextInserter.Insert(text, mode, _lifetime.Token));
                 if (result == InsertResult.Blocked)
                     Hint(L.T("Это окно запущено от администратора, вставить туда нельзя. Текст лежит в буфере обмена.",
                              "That window runs as administrator; typing into it is blocked. The text is on the clipboard."));

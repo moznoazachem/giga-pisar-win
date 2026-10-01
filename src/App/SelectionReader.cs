@@ -40,7 +40,7 @@ public static class SelectionReader
     private static Task<string?>? _inFlight;
 
     /// <summary>The selected text of the focused control, or null when there is none or it cannot be read in time.</summary>
-    public static async Task<string?> TryGetAsync()
+    public static async Task<string?> TryGetAsync(CancellationToken cancellationToken = default)
     {
         var fg = Native.GetForegroundWindow();
         if (fg == IntPtr.Zero || IsTerminal(fg)) return null;
@@ -51,7 +51,7 @@ public static class SelectionReader
         {
             var (answer, text) = Read();
             if (answer != Answer.Unsupported || spreadsheet) return text;
-            var copied = TextInserter.CopySelection();
+            var copied = TextInserter.CopySelection(cancellationToken);
             if (copied != null) Log.Write($"selection: via Ctrl+C, {copied.Length} chars");
             return copied is { Length: > MaxChars } ? copied[..MaxChars] : copied;
         });
