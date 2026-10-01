@@ -51,7 +51,7 @@ public partial class BrainServerPanel : UserControl
 
         ProviderBox.Items.Clear();
         foreach (var p in BrainProviders.All)
-            ProviderBox.Items.Add(new ComboBoxItem { Content = BrainProviders.Title(p), Tag = p });
+            ProviderBox.Items.Add(new ComboBoxItem { Content = ProviderTitle(p), Tag = p });
         var current = settings.CleanupEndpointUrl.Length > 0 ? BrainProviders.FromUrl(settings.CleanupEndpointUrl) : BrainProviders.DeepSeek;
         ProviderBox.SelectedIndex = Array.IndexOf(BrainProviders.All, current);
         UrlBox.Text = current.IsCustom ? settings.CleanupEndpointUrl : "";
@@ -93,18 +93,36 @@ public partial class BrainServerPanel : UserControl
         ModelBox.Text = "";
     }
 
+    /// <summary>Service name, with a mark when a key for it is saved.</summary>
+    private string ProviderTitle(BrainProvider p) =>
+        _settings.ProviderKeys.ContainsKey(p.Id) ? BrainProviders.Title(p) + L.T("  ·  ключ сохранён", "  ·  key saved") : BrainProviders.Title(p);
+
+    private void RefreshProviderTitles()
+    {
+        foreach (ComboBoxItem item in ProviderBox.Items)
+            if (item.Tag is BrainProvider p) item.Content = ProviderTitle(p);
+    }
+
     private void Provider_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_init) return;
-        // A cloud key must never travel to an address typed for "own server" (and back).
-        if (Provider.IsCustom != _lastProvider.IsCustom) { _init = true; KeyBox.Password = ""; _init = false; }
+        // Every service keeps its own key and model: switching away and back brings them back,
+        // and a key never travels to a service it was not entered for.
+        var typed = KeyBox.Password.Trim();
+        if (typed.Length > 0) _settings.ProviderKeys[_lastProvider.Id] = typed;
+        if (ModelBox.Text.Trim().Length > 0) _settings.ProviderModels[_lastProvider.Id] = ModelBox.Text.Trim();
+        _init = true;
+        KeyBox.Password = _settings.ProviderKeys.GetValueOrDefault(Provider.Id, "");
+        _init = false;
         _lastProvider = Provider;
         _loading?.Cancel();
         _keyPause.Stop();
         UpdateProviderUi();
         ClearModels();
+        var savedModel = _settings.ProviderModels.GetValueOrDefault(Provider.Id, "");
+        if (savedModel.Length > 0) { _init = true; ModelBox.Text = savedModel; _init = false; }
         Status.Text = "";
-        if (!Provider.IsCustom && KeyBox.Password.Length > 0) _ = LoadModelsAsync(pickDefault: true);
+        if (!Provider.IsCustom && KeyBox.Password.Length > 0) _ = LoadModelsAsync(pickDefault: savedModel.Length == 0);
     }
 
     /// <summary>A pasted key tells which service it is from; then the model list loads by itself.</summary>
@@ -237,7 +255,10 @@ public partial class BrainServerPanel : UserControl
         _settings.CleanupEndpointUrl = endpoint;
         _settings.CleanupApiKey = key;
         _settings.CleanupModel = model;
+        if (key.Length > 0) _settings.ProviderKeys[Provider.Id] = key;
+        _settings.ProviderModels[Provider.Id] = model;
         _apply();
+        RefreshProviderTitles();
         if (SpeechCleanup.IsInsecureRemote(endpoint))
             Status.Text = L.T("Внимание: адрес с http://, а сервер не на этом компьютере и не в домашней сети. Текст и ключ идут по интернету без шифрования, лучше https://.",
                               "Warning: an http:// address outside this computer and your home network. Text and key cross the internet unencrypted; prefer https://.");

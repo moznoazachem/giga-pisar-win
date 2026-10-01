@@ -450,6 +450,7 @@ public partial class PisarApp : Application
             string text = "";
             string? brainFailure = null;
             bool editedSelection = false;
+            bool brainCommand = false;
             if (!silent && samples.Length > MinTakeSamples)
             {
                 if (_settings.KeepLastRecording)
@@ -488,6 +489,7 @@ public partial class PisarApp : Application
                     {
                         string body = cmd?.body ?? text;
                         if (cmd != null) Log.Write($"brain command, {body.Length} chars");
+                        brainCommand = cmd != null;
                         var (answer, failure) = await RunBrainAsync(body, cmd?.command, selection: false, overlay);
                         if (_lifetime.IsCancellationRequested) return;
                         brainFailure = failure;
@@ -495,6 +497,10 @@ public partial class PisarApp : Application
                     }
                 }
             }
+
+            // Simple syntax is for dictation only: a Brain answer to a command or an edited selection goes in as is.
+            if (text.Length > 0 && _settings.SimpleSyntax && !editedSelection && !brainCommand)
+                text = SimpleSyntax.Apply(text);
 
             if (text.Length > 0)
             {

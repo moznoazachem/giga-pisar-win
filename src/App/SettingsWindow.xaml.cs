@@ -79,6 +79,11 @@ public partial class SettingsWindow : Window
         LanguageBox.SelectedIndex = (int)_settings.Language;
 
         OverlayBox.Content = L.T("Показывать плашку с волной во время записи", "Show the wave panel while recording");
+        SimpleSyntaxBox.Content = L.T("Упрощать синтаксис: одно предложение без заглавной буквы и точки",
+                                      "Simplify punctuation: a single sentence without a capital and a period");
+        SimpleSyntaxBox.ToolTip = L.T("Как реплика в переписке: «ок, буду в пять». Вопрос и восклицательный знак остаются.",
+                                      "Like a chat reply: \"ok, see you at five\". Question and exclamation marks stay.");
+        SimpleSyntaxBox.IsChecked = _settings.SimpleSyntax;
         AutostartBox.Content = L.T("Запускать при входе в Windows", "Start when I sign in to Windows");
         KeepBox.Content = L.T("Сохранять последнюю запись для разбора ошибок", "Keep the last recording for troubleshooting");
         OverlayBox.IsChecked = _settings.ShowOverlay;
@@ -178,6 +183,12 @@ public partial class SettingsWindow : Window
     {
         _unpin();
         UnpinButton.IsEnabled = false;
+    }
+
+    private void SimpleSyntax_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.SimpleSyntax = SimpleSyntaxBox.IsChecked == true;
+        _apply();
     }
 
     private void Keep_Click(object sender, RoutedEventArgs e)

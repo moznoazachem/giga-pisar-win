@@ -27,6 +27,8 @@ public sealed class Settings
     public bool BrainEveryTake { get; set; }
     /// <summary>With text selected at the key press, the take is a command on the selection. On by default, as on macOS.</summary>
     public bool BrainOnSelection { get; set; } = true;
+    /// <summary>A single dictated sentence goes in lowercase and without the closing period, like a chat reply.</summary>
+    public bool SimpleSyntax { get; set; }
 
     /// <summary>Read-only migration from 1.0.3, where the server Brain had a single on/off switch and cleaned every take.</summary>
     [JsonPropertyName("CleanupEnabled")]
@@ -63,6 +65,27 @@ public sealed class Settings
         }
     }
     public string CleanupModel { get; set; } = "";
+
+    /// <summary>
+    /// A key for every cloud service (by provider id), so switching services keeps each key, as on
+    /// macOS 3.9 and Android. In memory only; on disk each one is encrypted like <see cref="CleanupApiKeyProtected"/>,
+    /// which still holds the active key, so an older version finds it after a rollback.
+    /// </summary>
+    [JsonIgnore]
+    public Dictionary<string, string> ProviderKeys { get; set; } = new();
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? ProviderKeysProtected
+    {
+        get => ProviderKeys.Count == 0 ? null
+            : ProviderKeys.Where(kv => kv.Value.Length > 0).ToDictionary(kv => kv.Key, kv => Protect(kv.Value));
+        set => ProviderKeys = value == null ? new()
+            : value.Select(kv => (kv.Key, Value: Unprotect(kv.Value))).Where(kv => kv.Value.Length > 0)
+                   .ToDictionary(kv => kv.Key, kv => kv.Value);
+    }
+
+    /// <summary>The model last chosen for every service.</summary>
+    public Dictionary<string, string> ProviderModels { get; set; } = new();
     /// <summary>Own "every take" instructions; empty means our default in the interface language.</summary>
     public string CleanupPrompt { get; set; } = "";
     [JsonIgnore]
@@ -98,6 +121,14 @@ public sealed class Settings
             if (File.Exists(SettingsPath))
             {
                 var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsPath), JsonOptions) ?? new Settings();
+                // Up to 1.0.6 there was one key for everything: it belongs to the service that was set up.
+                if (s.ProviderKeys.Count == 0 && s.CleanupApiKey.Length > 0)
+                {
+                    var id = (s.CleanupEndpointUrl.Length > 0 ? BrainProviders.FromUrl(s.CleanupEndpointUrl) : BrainProviders.DeepSeek).Id;
+                    s.ProviderKeys[id] = s.CleanupApiKey;
+                    if (s.CleanupModel.Length > 0) s.ProviderModels[id] = s.CleanupModel;
+                    s._plainKeyOnDisk = true;   // write the new layout at once
+                }
                 if (s._plainKeyOnDisk) s.Save();   // the plain-text key from 1.0.3 leaves the disk at once, encrypted
                 return s;
             }
