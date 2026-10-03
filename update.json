@@ -1,8 +1,8 @@
 {
-  "version": "1.0.7",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.7/GigaPisar-Setup.exe",
-  "sha256": "cf5860635101ae51f07225a2a1a1da9f124668da2d8089a1271fa7fb24d9d7f0",
-  "size": 55027426,
-  "notes": "Мозг прямо на компьютере: модель Qwen (2 ГБ) скачивается с GitHub за несколько минут и работает без интернета и без ключей. Упрощённый синтаксис: одно предложение вставляется со строчной буквы и без точки, галочка во вкладке «Диктовка». У каждого облачного сервиса свой ключ: переключился на другой и вернулся, ключ на месте. Можно диктовать фразу за фразой, не дожидаясь паузы после вставки (спасибо pkochubey). «Править каждую диктовку» теперь называется «Править на лету», как на маке.",
-  "notes_en": "The Brain on this computer: the Qwen model (2 GB) downloads from GitHub in a few minutes and works offline, no keys needed. Simplify punctuation: a single sentence goes in lowercase and without a period, a checkbox on the Dictation tab. Every cloud service keeps its own key: switch away and back, the key is still there. Dictate phrase after phrase without waiting after each insert (thanks to pkochubey). \"Edit every take\" is now \"Edit on the fly\", as on macOS."
+  "version": "1.0.8",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.8/GigaPisar-Setup.exe",
+  "sha256": "94dea4f7c77ee3a4434d592736270ec682572823dd57e5f35e7935ec7c117068",
+  "size": 55111365,
+  "notes": "Обновления проверяются строже: Писарь берёт их только со своей страницы на GitHub и перепроверяет файл перед установкой. Установщик теперь собирается на GitHub из открытого кода. Надиктованный текст больше не остаётся в буфере обмена.",
+  "notes_en": "Stricter update check: Pisar takes updates only from its own GitHub page and re-checks the file before installing. The installer is now built on GitHub from the open source code. Dictated text no longer stays on the clipboard."
 }
