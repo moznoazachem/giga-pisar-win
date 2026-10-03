@@ -51,7 +51,7 @@ public partial class UpdateWindow : Window
             var path = await Updater.DownloadAsync(_info, progress, _cts.Token);
             Status.Text = L.T("Устанавливаю…", "Installing…");
             Bar.IsIndeterminate = true;
-            Updater.Install(path);
+            Updater.Install(path, _info.Sha256);
             _quit();
         }
         catch (OperationCanceledException)

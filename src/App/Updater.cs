@@ -28,8 +28,15 @@ public static class Updater
         "https://raw.githubusercontent.com/moznoazachem/giga-pisar-win/main/update.json",
     };
 
-    /// <summary>Test aid: PISAR_UPDATE_URL overrides the manifest location and makes the first check immediate.</summary>
+    /// <summary>Installers come only from this repository's releases.</summary>
+    private const string TrustedPrefix = "https://github.com/moznoazachem/giga-pisar-win/releases/download/";
+
+#if DEBUG
+    /// <summary>Test aid (debug builds only): PISAR_UPDATE_URL overrides the manifest location and makes the first check immediate.</summary>
     private static readonly string? OverrideUrl = Environment.GetEnvironmentVariable("PISAR_UPDATE_URL") is { Length: > 0 } u ? u : null;
+#else
+    private static readonly string? OverrideUrl = null;
+#endif
 
     public static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
     public static readonly TimeSpan FirstCheckDelay = OverrideUrl != null ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(45);
@@ -52,7 +59,7 @@ public static class Updater
                 if (info == null || !Version.TryParse(info.Version, out var remote)) continue;
                 if (!Version.TryParse(PisarApp.Version, out var local)) return null;
                 Log.Write($"update check: local {local}, remote {remote}");
-                bool trusted = info.Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) || OverrideUrl != null;
+                bool trusted = info.Url.StartsWith(TrustedPrefix, StringComparison.Ordinal) || OverrideUrl != null;
                 return remote > local && trusted ? info : null;
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
@@ -112,8 +119,14 @@ public static class Updater
     }
 
     /// <summary>Runs the installer silently. It replaces the files and relaunches the app; we exit right after.</summary>
-    public static void Install(string installerPath)
+    public static void Install(string installerPath, string expectedSha256)
     {
+        // Hold the file open (others may read, not write) from the second hash check until the
+        // installer has started, so nothing can swap it after verification.
+        using var hold = new FileStream(installerPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        var actual = Convert.ToHexString(SHA256.HashData(hold)).ToLowerInvariant();
+        if (!string.Equals(actual, expectedSha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("checksum mismatch");
         // Keep the user's autostart choice: the installer's task would otherwise reset it to "on".
         var tasks = Autostart.IsEnabled() ? "autostart" : "!autostart";
         var psi = new System.Diagnostics.ProcessStartInfo(installerPath)

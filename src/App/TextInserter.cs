@@ -119,12 +119,14 @@ public static class TextInserter
         try
         {
             await Task.Delay(ClipboardRestoreDelayMs, cancellationToken).ConfigureAwait(false);
-            if (saved == null || sequence == 0 || ui.HasShutdownStarted || ui.HasShutdownFinished) return;
+            if (sequence == 0 || ui.HasShutdownStarted || ui.HasShutdownFinished) return;
             await ui.InvokeAsync(() =>
             {
                 if (cancellationToken.IsCancellationRequested || ui.HasShutdownStarted) return;
-                if (Native.GetClipboardSequenceNumber() == sequence)
-                    Clipboard.SetDataObject(saved, true);
+                if (Native.GetClipboardSequenceNumber() != sequence) return;
+                // Nothing to give back: still clear it, so the dictation does not linger there.
+                if (saved == null) Clipboard.Clear();
+                else Clipboard.SetDataObject(saved, true);
             }, DispatcherPriority.Normal, cancellationToken).Task.ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested || ui.HasShutdownStarted)

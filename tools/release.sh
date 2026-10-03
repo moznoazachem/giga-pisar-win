@@ -11,10 +11,19 @@ VERSION=$(sed -n 's|.*<Version>\(.*\)</Version>.*|\1|p' src/GigaPisar.csproj)
 [[ -n "$VERSION" ]] || { echo "no <Version> in csproj"; exit 1; }
 git diff --quiet || { echo "commit your changes first"; exit 1; }
 
-./build.sh
-source build.local
+# The installer is built by GitHub Actions from the tagged source (.github/workflows/build.yml),
+# not on a local machine: a draft release waits for it, and update.json gets the hash of the
+# very file users will download.
+git tag "v$VERSION"
+git push -q origin main "v$VERSION"
+gh release create "v$VERSION" -R "$REPO" --draft --verify-tag --title "Гига Писарь для Windows $VERSION" --notes "$NOTES_RU"
+echo "waiting for the GitHub build…"
+sleep 15
+RUN=$(gh run list -R "$REPO" --workflow build.yml --branch "v$VERSION" --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch "$RUN" -R "$REPO" --exit-status >/dev/null
 mkdir -p dist
-scp -q -i "$BUILD_KEY" "$BUILD_HOST:${BUILD_DIR//\\//}/dist/GigaPisar-Setup.exe" dist/GigaPisar-Setup.exe
+rm -f dist/GigaPisar-Setup.exe
+gh release download "v$VERSION" -R "$REPO" -p GigaPisar-Setup.exe -D dist
 SHA=$(shasum -a 256 dist/GigaPisar-Setup.exe | cut -d' ' -f1)
 SIZE=$(stat -f %z dist/GigaPisar-Setup.exe)
 URL="https://github.com/$REPO/releases/download/v$VERSION/GigaPisar-Setup.exe"
@@ -28,8 +37,7 @@ PY
 echo >> update.json
 
 git add update.json
-git -c user.name="Panda" -c user.email="271212341+moznoazachem@users.noreply.github.com" commit -q -m "Release $VERSION"
-git tag "v$VERSION"
-git push -q origin main "v$VERSION"
-gh release create "v$VERSION" dist/GigaPisar-Setup.exe -R "$REPO" --title "Гига Писарь для Windows $VERSION" --notes "$NOTES_RU"
+git -c user.name="Panda" -c user.email="271212341+moznoazachem@users.noreply.github.com" commit -q -m "Update manifest $VERSION"
+gh release edit "v$VERSION" -R "$REPO" --draft=false --latest
+git push -q origin main
 echo "released $VERSION: $URL ($SIZE bytes, sha256 $SHA)"
