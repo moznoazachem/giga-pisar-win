@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Unit tests for the microphone capture. They compile src/App/Recorder.cs itself rather than the
-       WPF app, so they run on Windows, Linux or macOS and never open a real microphone:
+  <!-- Unit tests for the microphone capture and the model cache. They compile src/App/Recorder.cs and
+       src/App/IdleCache.cs themselves rather than the WPF app, so they run on Windows, Linux or macOS
+       and never open a real microphone:
        dotnet test tests/GigaPisar.Tests -->
 
   <PropertyGroup>
@@ -24,6 +25,7 @@
 
   <ItemGroup>
     <Compile Include="..\..\src\App\Recorder.cs" Link="App\Recorder.cs" />
+    <Compile Include="..\..\src\App\IdleCache.cs" Link="App\IdleCache.cs" />
   </ItemGroup>
 
 </Project>

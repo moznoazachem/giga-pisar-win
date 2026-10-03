@@ -8,6 +8,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text;
 using System.Windows;
+using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
 namespace GigaPisar.App;
@@ -39,7 +40,15 @@ public partial class PisarApp : Application
     private System.Drawing.Icon? _iconIdle;
     private System.Drawing.Icon? _iconBusy;
     private IntPtr _busyIconHandle;
-    private Core.Recognizer? _recognizer;
+    /// <summary>The speech model: loaded at startup, freed after the idle time chosen in Settings, and
+    /// loaded again at the next key press, while the user speaks.</summary>
+    private readonly IdleCache<Core.Recognizer> _model = new(LoadModel);
+    /// <summary>The model has loaded once: the installation works and the hotkey may start takes.</summary>
+    private bool _modelReady;
+    private readonly DispatcherTimer _idleTimer = new() { Interval = TimeSpan.FromSeconds(15) };
+    /// <summary>Test aid: PISAR_FREE_MODEL_AFTER=30 frees the model after 30 idle seconds.</summary>
+    private static readonly TimeSpan? FreeModelOverride =
+        int.TryParse(Environment.GetEnvironmentVariable("PISAR_FREE_MODEL_AFTER"), out int seconds) && seconds > 0 ? TimeSpan.FromSeconds(seconds) : null;
     private KeyboardHook? _hook;
     private readonly Recorder _recorder = new();
     private OverlayWindow? _overlay;
@@ -306,7 +315,8 @@ public partial class PisarApp : Application
         SetStatus(L.T("Загружаю модель…", "Loading the model…"));
         try
         {
-            _recognizer = await Task.Run(() => new Core.Recognizer(Settings.ModelDir));
+            await _model.GetAsync();
+            _modelReady = true;
         }
         catch (Exception ex)
         {
@@ -320,6 +330,8 @@ public partial class PisarApp : Application
             Quit();
             return;
         }
+        _idleTimer.Tick += (_, _) => FreeIdleModel();
+        _idleTimer.Start();
 
         _recorder.TakeTooLong += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync());
         try
@@ -402,7 +414,10 @@ public partial class PisarApp : Application
 
     private async Task HandlePressAsync()
     {
-        if (_busy || _recognizer == null || _recorder.IsRecording) return;
+        if (_busy || !_modelReady || _recorder.IsRecording) return;
+        // A model freed while Pisar sat idle loads again now, while the user speaks; the release waits for it.
+        if (!_model.IsLoaded) Log.Write("model: loading again for this take");
+        _ = _model.GetAsync();
         _selectionAtPress = BrainUsable && _settings.BrainOnSelection ? SelectionReader.TryGetAsync(_lifetime.Token) : null;
         if (_selectionAtPress != null) _ = HintSelectionAsync(_selectionAtPress);
         try
@@ -480,7 +495,18 @@ public partial class PisarApp : Application
                     float gain = Math.Min(TargetPeak / peak, MaxGain);
                     for (int i = 0; i < samples.Length; i++) samples[i] *= gain;
                 }
-                text = await Task.Run(() => _recognizer!.Transcribe(samples, Recorder.SampleRate));
+                Core.Recognizer model;
+                try
+                {
+                    model = await _model.GetAsync();   // usually in memory; after an idle spell, loading since the press
+                }
+                catch (Exception ex)
+                {
+                    Log.Write($"model load failed: {ex}");
+                    Hint(L.T($"Не удалось загрузить модель распознавания: {ex.Message}", $"Could not load the speech model: {ex.Message}"));
+                    return;
+                }
+                text = await Task.Run(() => model.Transcribe(samples, Recorder.SampleRate));
                 string? selected = _selectionAtPress != null && text.Length > 0 ? await _selectionAtPress : null;
                 _selectionAtPress = null;
                 if (selected != null)
@@ -560,8 +586,26 @@ public partial class PisarApp : Application
         finally
         {
             _busy = false;
+            _model.Touch();   // the idle time counts from the end of the take
             if (_tray != null) _tray.Icon = _iconIdle;
         }
+    }
+
+    private static Core.Recognizer LoadModel()
+    {
+        var clock = Stopwatch.StartNew();
+        var model = new Core.Recognizer(Settings.ModelDir);
+        Log.Write($"model loaded in {clock.Elapsed.TotalSeconds:F1} s, working set {Environment.WorkingSet >> 20} MB");
+        return model;
+    }
+
+    /// <summary>Frees the speech model once Pisar has sat idle for the time chosen in Settings.</summary>
+    private void FreeIdleModel()
+    {
+        int minutes = _settings.EffectiveFreeModelMinutes;
+        var after = FreeModelOverride ?? (minutes > 0 ? TimeSpan.FromMinutes(minutes) : (TimeSpan?)null);
+        if (after is { } idle && _model.FreeIfIdle(idle, inUse: _busy || _recorder.IsRecording))
+            Log.Write($"model freed after {idle.TotalMinutes:0.#} idle min, working set {Environment.WorkingSet >> 20} MB");
     }
 
     /// <summary>
@@ -751,7 +795,7 @@ public partial class PisarApp : Application
             brainServer.Text = Brain.ServerConfigured(_settings)
                 ? L.T($"В облаке ({host})", $"In the cloud ({host})")
                 : L.T("В облаке…", "In the cloud…");
-            hint.Text = _recognizer == null ? L.T("Модель ещё не загружена", "Model not loaded yet")
+            hint.Text = !_modelReady ? L.T("Модель ещё не загружена", "Model not loaded yet")
                 : L.T($"Зажмите {Settings.HotkeyTitle(_settings.HotkeyVk)} и говорите", $"Hold {Settings.HotkeyTitle(_settings.HotkeyVk)} and speak");
         };
         return menu;
@@ -808,7 +852,8 @@ public partial class PisarApp : Application
         _recorder.Dispose();
         _overlay?.Close();
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
-        _recognizer?.Dispose();
+        _idleTimer.Stop();
+        _model.Dispose();
         _iconBusy?.Dispose();
         if (_busyIconHandle != IntPtr.Zero) Native.DestroyIcon(_busyIconHandle);
         _iconIdle?.Dispose();
