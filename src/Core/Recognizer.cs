@@ -44,6 +44,9 @@ public sealed class Recognizer : IDisposable
             IntraOpNumThreads = threads > 0 ? threads : Math.Min(4, Environment.ProcessorCount),
             LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR,
         };
+        // Prepacking keeps a second, reordered copy of the int8 weights: about 190 MB more memory for
+        // bit-identical encoder output and no measurable speed-up with this model.
+        options.AddSessionConfigEntry("session.disable_prepacking", "1");
 
         _encoder = new InferenceSession(Path.Combine(modelDir, ModelName + "_encoder.onnx"), options);
         _decoder = new InferenceSession(Path.Combine(modelDir, ModelName + "_decoder.onnx"), options);

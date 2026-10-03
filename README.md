@@ -91,6 +91,12 @@ GigaPisar.exe --transcribe input.wav result.txt
 `PISAR_MODEL_DIR` is honoured by this headless mode only; the tray app always
 uses `%LOCALAPPDATA%\GigaPisar\model`.
 
+Unit tests of the microphone capture need no microphone and run on Windows, Linux or macOS:
+
+```
+dotnet test tests/GigaPisar.Tests
+```
+
 ## Code signing policy
 
 Release installers are to be signed through SignPath Foundation (application

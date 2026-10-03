@@ -56,6 +56,11 @@ english.Uninstall=Uninstall Giga Pisar
 [Tasks]
 Name: "autostart"; Description: "{cm:AutoStart}"; GroupDescription: "{cm:Extra}"
 
+[InstallDelete]
+; Up to 1.0.7 the app shipped NAudio.WinMM.dll, the waveIn code that security software blocks.
+; Nothing loads it any more; an upgrade removes it so that it is not even on disk.
+Type: files; Name: "{app}\NAudio.WinMM.dll"
+
 [Files]
 Source: "..\dist\app\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
