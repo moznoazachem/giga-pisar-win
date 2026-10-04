@@ -422,6 +422,9 @@ public partial class PisarApp : Application
             _tray?.ShowBalloonTip(8000, L.T("Микрофон недоступен", "Microphone unavailable"), why, Forms.ToolTipIcon.Warning);
             return;
         }
+        // A tap shorter than the device open: the release has already ended this take, and nothing
+        // would hide the pill again.
+        if (!_recorder.IsRecording) return;
         if (_tray != null) _tray.Icon = _iconBusy;
         if (_settings.ShowOverlay)
         {
