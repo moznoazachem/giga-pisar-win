@@ -88,9 +88,9 @@ public partial class SettingsWindow : Window
             FreeModelBox.Items.Add(new ComboBoxItem { Content = FreeModelText(minutes), Tag = minutes });
         FreeModelBox.SelectedIndex = choices.IndexOf(freeAfter);
         FreeModelHint.Text = L.T("Модель распознавания занимает в памяти около 400 МБ. Освобождённая модель снова загружается при нажатии клавиши, пока вы говорите. "
-                                 + "По умолчанию на компьютере с 8 ГБ памяти и меньше — через 10 минут простоя.",
+                                 + "По умолчанию на компьютере с 8 ГБ памяти и меньше модель освобождается через 30 минут простоя.",
                                  "The speech model takes about 400 MB of memory. Once freed, it loads again at the key press, while you speak. "
-                                 + "By default it is freed after 10 idle minutes on a computer with 8 GB of memory or less.");
+                                 + "By default it is freed after 30 idle minutes on a computer with 8 GB of memory or less.");
 
         OverlayBox.Content = L.T("Показывать плашку с волной во время записи", "Show the wave panel while recording");
         SimpleSyntaxBox.Content = L.T("Упрощать синтаксис: одно предложение без заглавной буквы и точки",
