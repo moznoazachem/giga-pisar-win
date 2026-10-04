@@ -78,6 +78,20 @@ public partial class SettingsWindow : Window
         LanguageBox.Items.Add(new ComboBoxItem { Content = "English", Tag = UiLanguage.English });
         LanguageBox.SelectedIndex = (int)_settings.Language;
 
+        FreeModelLabel.Text = L.T("Освобождать память", "Free memory");
+        int freeAfter = _settings.EffectiveFreeModelMinutes;
+        var choices = new List<int> { 5, 10, 30, 60 };
+        if (freeAfter > 0 && !choices.Contains(freeAfter)) { choices.Add(freeAfter); choices.Sort(); }   // a value set by hand
+        choices.Add(0);
+        FreeModelBox.Items.Clear();
+        foreach (int minutes in choices)
+            FreeModelBox.Items.Add(new ComboBoxItem { Content = FreeModelText(minutes), Tag = minutes });
+        FreeModelBox.SelectedIndex = choices.IndexOf(freeAfter);
+        FreeModelHint.Text = L.T("Модель распознавания занимает в памяти около 400 МБ. Освобождённая модель снова загружается при нажатии клавиши, пока вы говорите. "
+                                 + "По умолчанию на компьютере с 8 ГБ памяти и меньше — через 10 минут простоя.",
+                                 "The speech model takes about 400 MB of memory. Once freed, it loads again at the key press, while you speak. "
+                                 + "By default it is freed after 10 idle minutes on a computer with 8 GB of memory or less.");
+
         OverlayBox.Content = L.T("Показывать плашку с волной во время записи", "Show the wave panel while recording");
         SimpleSyntaxBox.Content = L.T("Упрощать синтаксис: одно предложение без заглавной буквы и точки",
                                       "Simplify punctuation: a single sentence without a capital and a period");
@@ -163,6 +177,26 @@ public partial class SettingsWindow : Window
         if (_loading || LanguageBox.SelectedItem is not ComboBoxItem item) return;
         _settings.Language = (UiLanguage)item.Tag;
         _apply();
+    }
+
+    private void FreeModel_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loading || FreeModelBox.SelectedItem is not ComboBoxItem item) return;
+        _settings.FreeModelMinutes = (int)item.Tag;
+        _apply();
+    }
+
+    private static string FreeModelText(int minutes)
+    {
+        if (minutes <= 0) return L.T("никогда", "never");
+        if (minutes == 60) return L.T("через час простоя", "after an idle hour");
+        string ru = (minutes % 10, minutes % 100) switch
+        {
+            (1, not 11) => "минуту",
+            (2 or 3 or 4, < 12 or > 14) => "минуты",
+            _ => "минут",
+        };
+        return L.T($"через {minutes} {ru} простоя", $"after {minutes} idle minute{(minutes == 1 ? "" : "s")}");
     }
 
     private void Overlay_Click(object sender, RoutedEventArgs e)

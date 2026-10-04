@@ -96,6 +96,17 @@ public sealed class Settings
     public int? OverlayX { get; set; }
     public int? OverlayY { get; set; }
 
+    /// <summary>Free the speech model after this many idle minutes; 0 keeps it loaded. Not set: 10 minutes
+    /// on a computer with 8 GB of memory or less, otherwise never.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? FreeModelMinutes { get; set; }
+
+    [JsonIgnore]
+    public int EffectiveFreeModelMinutes => FreeModelMinutes ?? (SmallMemory ? 10 : 0);
+
+    /// <summary>8 GB of memory or less (such a computer reports a little under 8 GiB).</summary>
+    public static bool SmallMemory { get; } = LocalBrain.Memory().total is > 0 and <= (8UL << 30) + (512UL << 20);
+
     public static string AppDataDir =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GigaPisar");
     public static string LocalDataDir =>
