@@ -39,6 +39,8 @@ public sealed class Recorder : IDisposable
     // Capture in the device's own format: set once the engine's conversion fails us, or by
     // PISAR_CAPTURE=device (testing aid for the fallback path).
     private volatile bool _deviceFormat = Environment.GetEnvironmentVariable("PISAR_CAPTURE") == "device";
+    // Some drivers refuse an event-driven stream (E_INVALIDARG at Initialize); polling is the fallback.
+    private volatile bool _polling;
     private readonly List<float> _samples = new(SampleRate * 30);
     private readonly object _gate = new();
     private float _levelSinceRead;
@@ -136,17 +138,20 @@ public sealed class Recorder : IDisposable
         }
     }
 
-    /// <summary>Opens the preferred capture path, or the other one when that fails.</summary>
+    /// <summary>Opens the preferred capture path, or the next one when that fails: format by Windows or
+    /// by the device, event-driven or polled.</summary>
     private Capture Open()
     {
-        bool preferred = _deviceFormat;
+        bool fmt = _deviceFormat, poll = _polling;
+        var attempts = new[] { (fmt, poll), (!fmt, poll), (fmt, !poll), (!fmt, !poll) };
         Exception? first = null;
-        foreach (bool deviceFormat in new[] { preferred, !preferred })
+        foreach (var (deviceFormat, polling) in attempts)
         {
             try
             {
-                var capture = Capture.Open(this, deviceFormat);
+                var capture = Capture.Open(this, deviceFormat, polling);
                 _deviceFormat = deviceFormat;   // keep using what works
+                _polling = polling;
                 if (capture.Backend != Backend) Log.Write($"capture: {capture.Backend}");
                 Backend = capture.Backend;
                 return capture;
@@ -154,7 +159,7 @@ public sealed class Recorder : IDisposable
             catch (Exception e) when (e is not TimeoutException)   // a device that does not answer is not asked twice
             {
                 first ??= e;
-                Log.Write($"capture attempt failed ({(deviceFormat ? "device format" : "16 kHz by Windows")}): {e.GetType().Name}: {e.Message}");
+                Log.Write($"capture attempt failed ({(deviceFormat ? "device format" : "16 kHz by Windows")}, {(polling ? "polled" : "event-driven")}): {e.GetType().Name}: {e.Message} (0x{e.HResult:X8})");
             }
         }
         throw first!;   // the first failure is the one to explain to the user
@@ -268,22 +273,22 @@ public sealed class Recorder : IDisposable
         /// <summary>Packets after which the engine reported lost audio.</summary>
         public int Gaps { get; private set; }
 
-        private Capture(Recorder owner, MMDevice device, WasapiRecorder recorder, bool deviceFormat)
+        private Capture(Recorder owner, MMDevice device, WasapiRecorder recorder, bool deviceFormat, bool polling)
         {
             _owner = owner;
             _device = device;
             _recorder = recorder;
             DeviceFormat = deviceFormat;
             _converter = new Converter(recorder.WaveFormat);   // throws for a device format we cannot read
-            Backend = deviceFormat
+            Backend = (deviceFormat
                 ? $"wasapi/{Converter.Describe(recorder.WaveFormat)}/converted-here"
-                : $"wasapi/{MixFormatOf(device)}/converted-by-windows";
+                : $"wasapi/{MixFormatOf(device)}/converted-by-windows") + (polling ? "/polled" : "");
             recorder.DataAvailable += OnData;
             recorder.RecordingStopped += OnStopped;
         }
 
         /// <summary>Opens the Windows default input and returns once it is really capturing.</summary>
-        public static Capture Open(Recorder owner, bool deviceFormat)
+        public static Capture Open(Recorder owner, bool deviceFormat, bool polling)
         {
             MMDevice device;
             using (var enumerator = new MMDeviceEnumerator())
@@ -296,9 +301,10 @@ public sealed class Recorder : IDisposable
                     .WithDevice(device)
                     .WithBufferLength(BufferMilliseconds)
                     .WithMmcssThreadPriority("Audio");
+                if (polling) builder = builder.WithPollingSync();
                 if (!deviceFormat) builder = builder.WithFormat(new WaveFormat(SampleRate, 16, 1));   // shared mode: the engine converts
                 recorder = builder.Build();
-                capture = new Capture(owner, device, recorder, deviceFormat);
+                capture = new Capture(owner, device, recorder, deviceFormat, polling);
                 recorder.StartRecording();
             }
             catch

@@ -74,6 +74,8 @@ public partial class PisarApp : Application
             return CliTranscribe(args[1], args[2]);
         if (args.Length >= 1 && args[0] == "--overlay-demo")
             return OverlayDemo();
+        if (args.Length >= 2 && args[0] == "--mic-probe")
+            return MicProbe(args[1]);
         if (args.Length >= 2 && args[0] == "--mic-test")
             return MicTest(args[1]);
         if (args.Length >= 3 && args[0] == "--brain-test")
@@ -140,6 +142,81 @@ public partial class PisarApp : Application
             File.WriteAllText(outPath, "ERROR: " + e);
             return 1;
         }
+    }
+
+    /// <summary>
+    /// Diagnostics for a microphone that will not open: tries every way of opening the default input
+    /// (format by Windows or by the device, with and without conversion and event callback) and writes
+    /// which call Windows refuses and with what code. Nothing is recorded or kept.
+    /// </summary>
+    private static int MicProbe(string outPath)
+    {
+        var sb = new StringBuilder();
+        try
+        {
+            using var enumerator = new NAudio.CoreAudioApi.MMDeviceEnumerator();
+            foreach (var d in enumerator.EnumerateAudioEndPoints(NAudio.CoreAudioApi.DataFlow.Capture, NAudio.CoreAudioApi.DeviceState.Active))
+                sb.AppendLine($"input: {d.FriendlyName}");
+            using var device = enumerator.GetDefaultAudioEndpoint(NAudio.CoreAudioApi.DataFlow.Capture, NAudio.CoreAudioApi.Role.Console);
+            sb.AppendLine($"default: {device.FriendlyName}");
+            NAudio.Wave.WaveFormat mix;
+            using (var client = device.CreateAudioClient())
+            {
+                mix = client.MixFormat;
+                sb.AppendLine($"mix format: {mix.Encoding} {mix.SampleRate} Hz {mix.Channels} ch {mix.BitsPerSample} bit, block {mix.BlockAlign}, extra {mix.ExtraSize}");
+                sb.AppendLine($"device period: default {client.DefaultDevicePeriod / 10000.0} ms, minimum {client.MinimumDevicePeriod / 10000.0} ms");
+            }
+            var formats = new (string Name, NAudio.Wave.WaveFormat? Format)[]
+            {
+                ("16 kHz PCM16 mono", new NAudio.Wave.WaveFormat(16000, 16, 1)),
+                ("device mix format", null),
+                ("float, device rate and channels", NAudio.Wave.WaveFormat.CreateIeeeFloatWaveFormat(mix.SampleRate, mix.Channels)),
+            };
+            const NAudio.CoreAudioApi.AudioClientStreamFlags convert =
+                NAudio.CoreAudioApi.AudioClientStreamFlags.AutoConvertPcm | NAudio.CoreAudioApi.AudioClientStreamFlags.SrcDefaultQuality;
+            var flagSets = new (string Name, NAudio.CoreAudioApi.AudioClientStreamFlags Flags)[]
+            {
+                ("convert + event", convert | NAudio.CoreAudioApi.AudioClientStreamFlags.EventCallback),
+                ("convert, polled", convert),
+                ("event", NAudio.CoreAudioApi.AudioClientStreamFlags.EventCallback),
+                ("polled", NAudio.CoreAudioApi.AudioClientStreamFlags.None),
+            };
+            foreach (var (fname, format) in formats)
+            foreach (var (flagName, flags) in flagSets)
+            {
+                string stage = "create";
+                try
+                {
+                    using var client = device.CreateAudioClient();
+                    var wf = format ?? client.MixFormat;
+                    stage = "initialize";
+                    client.Initialize(NAudio.CoreAudioApi.AudioClientShareMode.Shared, flags, 200 * 10000, 0, wf, Guid.Empty);
+                    using var ev = new EventWaitHandle(false, EventResetMode.AutoReset);
+                    if ((flags & NAudio.CoreAudioApi.AudioClientStreamFlags.EventCallback) != 0)
+                    {
+                        stage = "set event";
+                        client.SetEventHandle(ev.SafeWaitHandle.DangerousGetHandle());
+                    }
+                    stage = "start";
+                    client.Start();
+                    Thread.Sleep(300);
+                    stage = "read";
+                    int packet = client.AudioCaptureClient.GetNextPacketSize();
+                    client.Stop();
+                    sb.AppendLine($"OK    {fname} / {flagName}: next packet {packet} frames");
+                }
+                catch (Exception e)
+                {
+                    sb.AppendLine($"FAIL  {fname} / {flagName}: at {stage}, 0x{e.HResult:X8} {e.GetType().Name}: {e.Message}");
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            sb.AppendLine($"ERROR: 0x{e.HResult:X8} {e}");
+        }
+        File.WriteAllText(outPath, sb.ToString());
+        return 0;
     }
 
     /// <summary>Diagnostics: runs the saved Brain settings on the text of <paramref name="inPath"/>.</summary>
