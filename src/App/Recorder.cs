@@ -19,20 +19,44 @@ public sealed class Recorder : IDisposable
     /// <summary>A take longer than this is stopped by itself: the key is stuck or the hook died.</summary>
     public static readonly TimeSpan MaxTake = TimeSpan.FromMinutes(5);
 
-    private IWaveIn? _capture;
-    private ManualResetEventSlim? _stopped;
-    private readonly List<float> _samples = new(SampleRate * 30);
+    private static readonly int MaxSamples = checked((int)(MaxTake.TotalSeconds * SampleRate));
+    private Take? _take;
+    private long _recordingId;
+    private bool _disposed;
     private readonly object _gate = new();
     private float _levelSinceRead;
     private float _takePeak;
-    private bool _capHit;
     private double _noiseDb = double.NaN;
     private double _peakDb = double.NaN;
 
-    // WASAPI path: device-format bytes go through a resampler to 16 kHz mono.
-    private BufferedWaveProvider? _wasapiBuffer;
-    private ISampleProvider? _wasapiResampled;
-    private readonly float[] _wasapiChunk = new float[SampleRate];
+    private sealed class Take
+    {
+        public readonly long Id;
+        public readonly List<float> Samples = new(SampleRate);
+        public Attempt? Capture;
+        public Task Opening = Task.CompletedTask;
+        public Task? Closing;
+        public Task<float[]>? Result;
+        public bool StopRequested;
+        public bool Discard;
+        public bool Accepting = true;
+        public bool CapHit;
+
+        public Take(long id) => Id = id;
+    }
+
+    private sealed class Attempt
+    {
+        public required IWaveIn Device;
+        public MMDevice? Endpoint;
+        public BufferedWaveProvider? Buffer;
+        public ISampleProvider? Resampled;
+        public readonly float[] Chunk = new float[SampleRate];
+        public readonly TaskCompletionSource Ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public readonly TaskCompletionSource Stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public EventHandler<WaveInEventArgs>? OnData;
+        public EventHandler<StoppedEventArgs>? OnStopped;
+    }
 
     /// <summary>The display meter adapts to the input: it tracks the noise floor and the loudest
     /// recent buffer and stretches the bars between them, so a quiet line-level receiver and a hot
@@ -48,15 +72,18 @@ public sealed class Recorder : IDisposable
     }
 
     /// <summary>Loudest absolute sample of the current take, 0..1.</summary>
-    public float TakePeak => _takePeak;
+    public float TakePeak { get { lock (_gate) return _takePeak; } }
 
-    public bool IsRecording { get; private set; }
+    public bool IsRecording { get { lock (_gate) return _take is { StopRequested: false, Accepting: true }; } }
+    public bool HasTake { get { lock (_gate) return _take != null; } }
+    public long RecordingId { get { lock (_gate) return _recordingId; } }
 
     /// <summary>Which API the current take uses; for the log.</summary>
     public string Backend { get; private set; } = "";
 
     /// <summary>Raised on the capture thread when the take reaches <see cref="MaxTake"/>.</summary>
-    public event Action? TakeTooLong;
+    public event Action<long>? TakeTooLong;
+    public event Action<long>? RecordingEnded;
 
     /// <summary>Number of waveIn recording devices Windows reports.</summary>
     public static int DeviceCount
@@ -83,181 +110,268 @@ public sealed class Recorder : IDisposable
 
     public Task StartAsync()
     {
-        GapMs = _lastStop == DateTime.MinValue ? -1 : (DateTime.UtcNow - _lastStop).TotalMilliseconds;
-        lock (_gate) { _samples.Clear(); _levelSinceRead = 0; _takePeak = 0; _capHit = false; _noiseDb = double.NaN; _peakDb = double.NaN; }
-        var stopped = new ManualResetEventSlim(false);
-        _stopped = stopped;
-        IsRecording = true;
-
-        // NAudio captures SynchronizationContext.Current in the capture object's constructor and
-        // posts RecordingStopped through it. Built on a pool thread there is no context, so the
-        // event fires directly on the capture thread and StopAsync does not have to wait for a UI
-        // thread that may be busy.
-        return Task.Run(() =>
+        lock (_gate)
         {
-            Exception? first = null;
-            // PISAR_CAPTURE=wasapi forces the fallback path (testing aid).
-            bool forceWasapi = Environment.GetEnvironmentVariable("PISAR_CAPTURE") == "wasapi";
-            var attempts = forceWasapi
-                ? new Func<ManualResetEventSlim, IWaveIn>[] { OpenWasapi }
-                : new Func<ManualResetEventSlim, IWaveIn>[] { s => OpenWaveIn(-1, s), s => OpenWaveIn(0, s), OpenWasapi };
-            foreach (var attempt in attempts)
-            {
-                try
-                {
-                    _capture = attempt(stopped);
-                    return;
-                }
-                catch (Exception e)
-                {
-                    first ??= e;
-                    Log.Write($"capture attempt failed: {e.GetType().Name}: {e.Message}");
-                }
-            }
-            IsRecording = false;
-            throw first!;
-        });
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_take != null) throw new InvalidOperationException("The previous recording has not been closed");
+            GapMs = _lastStop == DateTime.MinValue ? -1 : (DateTime.UtcNow - _lastStop).TotalMilliseconds;
+            _levelSinceRead = 0;
+            _takePeak = 0;
+            _noiseDb = double.NaN;
+            _peakDb = double.NaN;
+            Backend = "";
+            var take = _take = new Take(++_recordingId);
+            take.Opening = Task.Run(() => OpenTake(take));
+            return take.Opening;
+        }
     }
 
-    private IWaveIn OpenWaveIn(int deviceNumber, ManualResetEventSlim stopped)
+    private void OpenTake(Take take)
     {
-        var wi = new WaveInEvent
+        Exception? first = null;
+        bool forceWasapi = Environment.GetEnvironmentVariable("PISAR_CAPTURE") == "wasapi";
+        var factories = forceWasapi
+            ? new Func<Attempt>[] { OpenWasapi }
+            : new Func<Attempt>[] { () => OpenWaveIn(-1), () => OpenWaveIn(0), OpenWasapi };
+        foreach (var factory in factories)
         {
-            DeviceNumber = deviceNumber,   // -1 is WAVE_MAPPER: the default input device
+            lock (_gate) if (take.StopRequested) return;
+            Attempt? attempt = null;
+            try
+            {
+                attempt = factory();
+                var owned = attempt;
+                attempt.OnData = (_, e) => OnData(take, owned, e);
+                attempt.OnStopped = (_, e) =>
+                {
+                    owned.Stopped.TrySetResult();
+                    if (e.Exception != null) Log.Write($"capture stopped: {e.Exception.Message}");
+                    bool notify;
+                    lock (_gate)
+                    {
+                        var current = ReferenceEquals(_take, take) && ReferenceEquals(take.Capture, owned);
+                        notify = current && !take.StopRequested && !take.CapHit;
+                        if (current) take.Accepting = false;
+                    }
+                    if (notify) RecordingEnded?.Invoke(take.Id);
+                };
+                attempt.Device.DataAvailable += attempt.OnData;
+                attempt.Device.RecordingStopped += attempt.OnStopped;
+                lock (_gate)
+                {
+                    take.Capture = attempt;
+                    take.Accepting = !take.Discard && !take.CapHit;
+                }
+                attempt.Device.StartRecording();
+                lock (_gate)
+                    Backend = attempt.Device is WaveInEvent wave
+                        ? wave.DeviceNumber == -1 ? "waveIn/default" : "waveIn/0"
+                        : $"wasapi/{attempt.Device.WaveFormat.SampleRate}Hz/{attempt.Device.WaveFormat.Channels}ch";
+                return;
+            }
+            catch (Exception e)
+            {
+                if (attempt != null)
+                {
+                    DisposeAttempt(attempt);
+                    lock (_gate) take.Capture = null;
+                }
+                first ??= e;
+                Log.Write($"capture attempt failed: {e.GetType().Name}: {e.Message}");
+            }
+        }
+        throw first!;
+    }
+
+    private static Attempt OpenWaveIn(int deviceNumber) => new()
+    {
+        Device = new WaveInEvent
+        {
+            DeviceNumber = deviceNumber,
             WaveFormat = new WaveFormat(SampleRate, 16, 1),
             BufferMilliseconds = 40,
             NumberOfBuffers = 4,
-        };
-        wi.DataAvailable += OnPcm16Data;
-        wi.RecordingStopped += (_, _) => { try { stopped.Set(); } catch (ObjectDisposedException) { } };
+        }
+    };
+
+    private static Attempt OpenWasapi()
+    {
+        using var enumerator = new MMDeviceEnumerator();
+        var endpoint = enumerator.GetDefaultAudioEndpoint(DataFlow.Capture, Role.Console);
+        WasapiCapture? capture = null;
         try
         {
-            wi.StartRecording();
+            capture = new WasapiCapture(endpoint);
+            var buffer = new BufferedWaveProvider(capture.WaveFormat)
+            {
+                DiscardOnBufferOverflow = true, BufferDuration = TimeSpan.FromSeconds(2), ReadFully = false,
+            };
+            ISampleProvider samples = buffer.ToSampleProvider();
+            if (capture.WaveFormat.Channels > 1)
+                samples = new StereoToMonoSampleProvider(samples) { LeftVolume = 0.5f, RightVolume = 0.5f };
+            return new Attempt
+            {
+                Device = capture, Endpoint = endpoint, Buffer = buffer,
+                Resampled = new WdlResamplingSampleProvider(samples, SampleRate),
+            };
         }
         catch
         {
-            wi.DataAvailable -= OnPcm16Data;
-            wi.Dispose();
+            capture?.Dispose();
+            endpoint.Dispose();
             throw;
         }
-        Backend = deviceNumber == -1 ? "waveIn/default" : "waveIn/0";
-        return wi;
     }
 
-    private IWaveIn OpenWasapi(ManualResetEventSlim stopped)
+    private void OnData(Take take, Attempt attempt, WaveInEventArgs e)
     {
-        var capture = new WasapiCapture();   // default capture endpoint, shared mode, device format
-        // ReadFully=false: when the buffer runs dry Read returns 0 instead of padding with silence,
-        // otherwise the drain loop below would never end.
-        _wasapiBuffer = new BufferedWaveProvider(capture.WaveFormat) { DiscardOnBufferOverflow = true, BufferDuration = TimeSpan.FromSeconds(2), ReadFully = false };
-        ISampleProvider samples = _wasapiBuffer.ToSampleProvider();
-        if (capture.WaveFormat.Channels > 1) samples = new StereoToMonoSampleProvider(samples) { LeftVolume = 0.5f, RightVolume = 0.5f };
-        _wasapiResampled = new WdlResamplingSampleProvider(samples, SampleRate);
-        capture.DataAvailable += OnWasapiData;
-        capture.RecordingStopped += (_, _) => { try { stopped.Set(); } catch (ObjectDisposedException) { } };
-        try
-        {
-            capture.StartRecording();
-        }
-        catch
-        {
-            capture.DataAvailable -= OnWasapiData;
-            capture.Dispose();
-            throw;
-        }
-        Backend = $"wasapi/{capture.WaveFormat.SampleRate}Hz/{capture.WaveFormat.Channels}ch";
-        return capture;
-    }
-
-    private void OnPcm16Data(object? sender, WaveInEventArgs e)
-    {
-        int n = e.BytesRecorded / 2;
-        var chunk = n <= _wasapiChunk.Length ? _wasapiChunk : new float[n];
-        for (int i = 0; i < n; i++) chunk[i] = BitConverter.ToInt16(e.Buffer, i * 2) / 32768f;
-        Append(chunk.AsSpan(0, n));
-    }
-
-    private void OnWasapiData(object? sender, WaveInEventArgs e)
-    {
-        _wasapiBuffer!.AddSamples(e.Buffer, 0, e.BytesRecorded);
-        int n;
-        int guard = 0;
-        while ((n = _wasapiResampled!.Read(_wasapiChunk, 0, _wasapiChunk.Length)) > 0 && guard++ < 16)
-        {
-            Append(_wasapiChunk.AsSpan(0, n));
-            if (n < _wasapiChunk.Length) break;
-        }
-    }
-
-    private void Append(ReadOnlySpan<float> chunk)
-    {
-        double sum = 0;
+        attempt.Ready.TrySetResult();
         bool hitCap = false;
         lock (_gate)
         {
-            foreach (var v in chunk)
+            if (!ReferenceEquals(_take, take) || !ReferenceEquals(take.Capture, attempt) || !take.Accepting) return;
+            if (attempt.Buffer == null)
             {
-                _samples.Add(v);
-                sum += v * v;
-                float a = Math.Abs(v);
-                if (a > _takePeak) _takePeak = a;
+                int count = e.BytesRecorded / 2;
+                var chunk = count <= attempt.Chunk.Length ? attempt.Chunk : new float[count];
+                for (int i = 0; i < count; i++) chunk[i] = BitConverter.ToInt16(e.Buffer, i * 2) / 32768f;
+                hitCap = Append(take, chunk.AsSpan(0, count));
             }
-            if (chunk.Length > 0)
+            else
             {
-                double rms = Math.Sqrt(sum / chunk.Length);
-                double db = 20 * Math.Log10(Math.Max(rms, 1e-7));
-                if (double.IsNaN(_noiseDb)) { _noiseDb = db; _peakDb = db + MeterMinSpanDb; }
-                _noiseDb = Math.Min(db, _noiseDb + MeterFloorRiseDb);   // floor: drops at once, rises slowly
-                _peakDb = Math.Max(db, _peakDb - MeterPeakFallDb);      // ceiling: rises at once, falls slowly
-                double span = Math.Max(_peakDb - _noiseDb, MeterMinSpanDb);
-                float level = (float)Math.Clamp((db - _noiseDb) / span, 0, 1);
-                _levelSinceRead = Math.Max(_levelSinceRead, level);
+                attempt.Buffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
+                int count;
+                int guard = 0;
+                while ((count = attempt.Resampled!.Read(attempt.Chunk, 0, attempt.Chunk.Length)) > 0 && guard++ < 16)
+                {
+                    hitCap |= Append(take, attempt.Chunk.AsSpan(0, count));
+                    if (count < attempt.Chunk.Length || !take.Accepting) break;
+                }
             }
-            if (!_capHit && _samples.Count >= MaxTake.TotalSeconds * SampleRate) { _capHit = true; hitCap = true; }
         }
-        if (hitCap) TakeTooLong?.Invoke();
+        if (hitCap)
+        {
+            _ = CloseDeviceAsync(take);
+            TakeTooLong?.Invoke(take.Id);
+        }
+    }
+
+    private bool Append(Take take, ReadOnlySpan<float> chunk)
+    {
+        chunk = chunk[..Math.Min(chunk.Length, MaxSamples - take.Samples.Count)];
+        int needed = take.Samples.Count + chunk.Length;
+        if (needed > take.Samples.Capacity)
+            take.Samples.Capacity = Math.Min(MaxSamples, Math.Max(needed, take.Samples.Capacity * 2));
+        double sum = 0;
+        foreach (var v in chunk)
+        {
+            take.Samples.Add(v);
+            sum += v * v;
+            float a = Math.Abs(v);
+            if (a > _takePeak) _takePeak = a;
+        }
+        if (chunk.Length > 0)
+        {
+            double rms = Math.Sqrt(sum / chunk.Length);
+            double db = 20 * Math.Log10(Math.Max(rms, 1e-7));
+            if (double.IsNaN(_noiseDb)) { _noiseDb = db; _peakDb = db + MeterMinSpanDb; }
+            _noiseDb = Math.Min(db, _noiseDb + MeterFloorRiseDb);
+            _peakDb = Math.Max(db, _peakDb - MeterPeakFallDb);
+            double span = Math.Max(_peakDb - _noiseDb, MeterMinSpanDb);
+            float level = (float)Math.Clamp((db - _noiseDb) / span, 0, 1);
+            _levelSinceRead = Math.Max(_levelSinceRead, level);
+        }
+        if (take.CapHit || take.Samples.Count < MaxSamples) return false;
+        take.CapHit = true;
+        take.Accepting = false;
+        return true;
     }
 
     /// <summary>Stops capture and returns everything recorded since StartAsync().</summary>
-    public Task<float[]> StopAsync()
+    public Task<float[]> StopAsync(bool discard = false)
     {
-        var capture = _capture;
-        var stopped = _stopped;
-        _capture = null;
-        _stopped = null;
-        IsRecording = false;
-        if (capture == null) return Task.FromResult(Array.Empty<float>());
-
-        return Task.Run(() =>
+        lock (_gate)
         {
-            try
-            {
-                capture.StopRecording();
-                stopped?.Wait(500);
-            }
-            catch (Exception e) { Log.Write($"capture stop: {e.Message}"); }
-            finally
-            {
-                capture.DataAvailable -= OnPcm16Data;
-                capture.DataAvailable -= OnWasapiData;
-                capture.Dispose();
-                stopped?.Dispose();
-                _wasapiBuffer = null;
-                _wasapiResampled = null;
-            }
+            var take = _take;
+            if (take == null) return Task.FromResult(Array.Empty<float>());
+            take.StopRequested = true;
+            take.Discard |= discard;
+            if (take.Discard) take.Accepting = false;
+            if (take.Result == null || take.Result.IsFaulted)
+                take.Result = Task.Run(() => FinishTakeAsync(take));
+            return take.Result;
+        }
+    }
+
+    private async Task<float[]> FinishTakeAsync(Take take)
+    {
+        await CloseDeviceAsync(take).ConfigureAwait(false);
+        lock (_gate)
+        {
+            take.Accepting = false;
+            var result = take.Discard ? Array.Empty<float>() : take.Samples.ToArray();
+            take.Samples.Clear();
+            take.Samples.Capacity = 0;
+            if (ReferenceEquals(_take, take)) _take = null;
             _lastStop = DateTime.UtcNow;
-            lock (_gate)
+            _levelSinceRead = 0;
+            return result;
+        }
+    }
+
+    private Task CloseDeviceAsync(Take take)
+    {
+        lock (_gate)
+        {
+            if (take.Closing == null || take.Closing.IsFaulted)
+                take.Closing = Task.Run(() => CloseDeviceCoreAsync(take));
+            return take.Closing;
+        }
+    }
+
+    private async Task CloseDeviceCoreAsync(Take take)
+    {
+        try { await take.Opening.ConfigureAwait(false); }
+        catch { }
+        var attempt = take.Capture;
+        if (attempt == null) return;
+
+        // WaveInEvent queues its recording thread after StartRecording returns. A stop before
+        // that thread enters DoRecording can be overwritten by its Capturing state. Wait for
+        // the first callback, then retry stopping until RecordingStopped confirms completion.
+        await Task.WhenAny(attempt.Ready.Task, attempt.Stopped.Task, Task.Delay(500)).ConfigureAwait(false);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        try
+        {
+            while (!attempt.Stopped.Task.IsCompleted)
             {
-                var result = _samples.ToArray();
-                _samples.Clear();
-                _levelSinceRead = 0;
-                return result;
+                attempt.Device.StopRecording();
+                await Task.WhenAny(attempt.Stopped.Task, Task.Delay(100)).ConfigureAwait(false);
+                if (!attempt.Stopped.Task.IsCompleted && DateTime.UtcNow >= deadline)
+                    throw new TimeoutException("The microphone did not confirm that recording stopped");
             }
-        });
+        }
+        catch
+        {
+            lock (_gate) take.Accepting = false;
+            throw;
+        }
+        lock (_gate) take.Accepting = false;
+        DisposeAttempt(attempt);
+        lock (_gate) take.Capture = null;
+    }
+
+    private static void DisposeAttempt(Attempt attempt)
+    {
+        attempt.Device.DataAvailable -= attempt.OnData;
+        attempt.Device.RecordingStopped -= attempt.OnStopped;
+        try { attempt.Device.Dispose(); }
+        finally { attempt.Endpoint?.Dispose(); }
     }
 
     public void Dispose()
     {
-        if (_capture != null) StopAsync().GetAwaiter().GetResult();
+        lock (_gate) _disposed = true;
+        StopAsync(discard: true).GetAwaiter().GetResult();
     }
 }

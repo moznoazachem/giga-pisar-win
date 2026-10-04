@@ -47,6 +47,11 @@ public partial class PisarApp : Application
     private UpdateWindow? _updateWindow;
     private readonly CancellationTokenSource _lifetime = new();
     private bool _busy;
+    private long _listeningId;
+    private readonly System.Windows.Threading.DispatcherTimer _recordingWatchdog = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(150),
+    };
     /// <summary>Text selected when the key went down (read in the background); a take with a selection is a command on it.</summary>
     private Task<string?>? _selectionAtPress;
 
@@ -321,12 +326,19 @@ public partial class PisarApp : Application
             return;
         }
 
-        _recorder.TakeTooLong += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync());
+        _recorder.TakeTooLong += id => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync(expectedId: id));
+        _recorder.RecordingEnded += id => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync(expectedId: id));
+        _recordingWatchdog.Tick += (_, _) =>
+        {
+            if (_recorder.IsRecording) _hook?.CheckReleasedKey();
+            else _recordingWatchdog.Stop();
+        };
         try
         {
             _hook = new KeyboardHook(_settings.HotkeyVk);
             _hook.Pressed += () => Dispatcher.BeginInvoke(() => _ = HandlePressAsync());
             _hook.Released += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync());
+            _hook.Cancelled += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync(discard: true));
         }
         catch (Exception ex)
         {
@@ -402,15 +414,27 @@ public partial class PisarApp : Application
 
     private async Task HandlePressAsync()
     {
-        if (_busy || _recognizer == null || _recorder.IsRecording) return;
+        if (_busy || _recognizer == null || _recorder.HasTake || _lifetime.IsCancellationRequested) return;
         _selectionAtPress = BrainUsable && _settings.BrainOnSelection ? SelectionReader.TryGetAsync(_lifetime.Token) : null;
         if (_selectionAtPress != null) _ = HintSelectionAsync(_selectionAtPress);
+        long takeId = 0;
         try
         {
-            await _recorder.StartAsync();
+            var opening = _recorder.StartAsync();
+            takeId = _listeningId = _recorder.RecordingId;
+            _recordingWatchdog.Start();
+            await opening;
         }
         catch (Exception ex)
         {
+            if (takeId != 0 && _recorder.RecordingId == takeId)
+            {
+                try { await _recorder.StopAsync(discard: true); }
+                catch (Exception stopError) { Log.Write($"failed capture cleanup: {stopError.Message}"); }
+            }
+            if (_listeningId != takeId || _lifetime.IsCancellationRequested) return;
+            _listeningId = 0;
+            _recordingWatchdog.Stop();
             Log.Write($"mic failed: {ex.GetType().Name}: {ex.Message} (devices: {Recorder.DeviceCount})");
             string why = Recorder.DeviceCount == 0
                 ? L.T("Windows не видит ни одного устройства записи. Подключите микрофон или включите его в Параметрах звука, раздел «Ввод».",
@@ -422,6 +446,7 @@ public partial class PisarApp : Application
             _tray?.ShowBalloonTip(8000, L.T("Микрофон недоступен", "Microphone unavailable"), why, Forms.ToolTipIcon.Warning);
             return;
         }
+        if (_listeningId != takeId || !_recorder.IsRecording || _lifetime.IsCancellationRequested) return;
         if (_tray != null) _tray.Icon = _iconBusy;
         if (_settings.ShowOverlay)
         {
@@ -443,14 +468,19 @@ public partial class PisarApp : Application
         return $"{Db(samples, 0, half)}/{Db(samples, half, 2 * half)}/{Db(samples, 2 * half, samples.Length)}";
     }
 
-    private async Task HandleReleaseAsync()
+    private async Task HandleReleaseAsync(bool discard = false, long? expectedId = null)
     {
-        if (!_recorder.IsRecording || _busy) return;
+        if (!_recorder.HasTake || _busy) return;
+        if (expectedId.HasValue && _recorder.RecordingId != expectedId.Value) return;
         _busy = true;
+        _listeningId = 0;
+        _recordingWatchdog.Stop();
         var overlay = _settings.ShowOverlay ? _overlay : null;
         try
         {
-            var samples = await _recorder.StopAsync();
+            if (discard) overlay?.HideNow();
+            var samples = await _recorder.StopAsync(discard);
+            if (discard || _lifetime.IsCancellationRequested) return;
             overlay?.ShowRecognizing();
 
             float peak = _recorder.TakePeak;
@@ -556,6 +586,7 @@ public partial class PisarApp : Application
         }
         finally
         {
+            _selectionAtPress = null;
             _busy = false;
             if (_tray != null) _tray.Icon = _iconIdle;
         }
@@ -800,9 +831,12 @@ public partial class PisarApp : Application
     private void Quit()
     {
         _lifetime.Cancel();
+        _listeningId = 0;
+        _recordingWatchdog.Stop();
         LocalBrain.Stop();
         _hook?.Dispose();
-        _recorder.Dispose();
+        try { _recorder.Dispose(); }
+        catch (Exception ex) { Log.Write($"capture shutdown: {ex.Message}"); }
         _overlay?.Close();
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         _recognizer?.Dispose();

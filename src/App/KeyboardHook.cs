@@ -14,6 +14,7 @@ namespace GigaPisar.App;
 
 public sealed class KeyboardHook : IDisposable
 {
+    private const uint CheckReleaseMessage = 0x8001;
     private readonly Native.LowLevelKeyboardProc _proc;   // kept alive for the unmanaged side
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _ready = new(false);
@@ -30,6 +31,12 @@ public sealed class KeyboardHook : IDisposable
     /// <summary>Raised on the hook thread; handlers must return immediately (marshal to the UI thread).</summary>
     public event Action? Pressed;
     public event Action? Released;
+    public event Action? Cancelled;
+
+    public void CheckReleasedKey()
+    {
+        if (_threadId != 0) Native.PostThreadMessage(_threadId, CheckReleaseMessage, IntPtr.Zero, IntPtr.Zero);
+    }
 
     public KeyboardHook(int hotkeyVk)
     {
@@ -52,6 +59,18 @@ public sealed class KeyboardHook : IDisposable
 
         while (Native.GetMessage(out var msg, IntPtr.Zero, 0, 0) > 0)
         {
+            if (msg.message == CheckReleaseMessage)
+            {
+                // Win and single-key hotkeys are swallowed, so their asynchronous key state
+                // cannot be used here. Left Ctrl is forwarded and can recover a missed release
+                // for the Ctrl+Win combination without querying state inside the hook callback.
+                if (_down && _activeWinVk != 0 && (Native.GetAsyncKeyState(Native.VK_LCONTROL) & 0x8000) == 0)
+                {
+                    _down = false;
+                    Released?.Invoke();
+                }
+                continue;
+            }
             Native.TranslateMessage(ref msg);
             Native.DispatchMessage(ref msg);
         }
@@ -73,6 +92,12 @@ public sealed class KeyboardHook : IDisposable
                 int vk = info.vkCode == Native.VK_CONTROL
                     ? (info.flags & Native.LLKHF_EXTENDED) != 0 ? 0xA3 : 0xA2
                     : (int)info.vkCode;
+
+                if (keyDown && vk == 0x1B && _down)
+                {
+                    _down = false;
+                    Cancelled?.Invoke();
+                }
 
                 if (vk == Native.VK_LCONTROL && keyUp && _activeWinVk != 0 && _down)
                 {
