@@ -1,8 +1,8 @@
 {
-  "version": "1.0.10",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.10/GigaPisar-Setup.exe",
-  "sha256": "2e3cf1a82be36316196d5b099c3b6a51ab01ae129f74e98c641b36729baecd65",
-  "size": 55199430,
-  "notes": "Если микрофон не открывается обычным способом, Писарь пробует ещё два запасных, а в журнал пишет точные коды ошибок Windows. Для сложных случаев есть диагностика: GigaPisar.exe --mic-probe отчёт.txt",
-  "notes_en": "If the microphone does not open the usual way, Pisar tries two more fallbacks and logs exact Windows error codes. For hard cases there is a diagnostic: GigaPisar.exe --mic-probe report.txt"
+  "version": "1.0.11",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.11/GigaPisar-Setup.exe",
+  "sha256": "04117cb06a3a78521229412a56a8656034482b55d0666b0dc4e1ab82a30d65bd",
+  "size": 55195892,
+  "notes": "Если запись звука запрещает антивирус или корпоративная политика (например, Kaspersky «Предотвращение вторжений»), Писарь теперь так и говорит и подсказывает, что сделать, вместо непонятной ошибки.",
+  "notes_en": "If recording is blocked by an antivirus or a corporate policy (for example Kaspersky Intrusion prevention), Pisar now says so and tells what to do, instead of a cryptic error."
 }
