@@ -167,6 +167,8 @@ public sealed class Recorder : IDisposable
         bool hitCap = false;
         lock (_gate)
         {
+            // Past the cap nothing more is kept, even if the UI is slow to end the take.
+            if (_capHit) return;
             foreach (var x in chunk)
             {
                 float v = Math.Clamp(x, -1f, 1f);
@@ -224,6 +226,8 @@ public sealed class Recorder : IDisposable
         {
             result = _samples.ToArray();
             _samples.Clear();
+            // A long take grew the list to tens of MB; give that back instead of keeping it until exit.
+            if (_samples.Capacity > SampleRate * 30) _samples.Capacity = SampleRate * 30;
             _levelSinceRead = 0;
         }
         if (capture.Gaps > 0) Log.Write($"capture: the engine dropped audio {capture.Gaps} time(s) in this take; the capture thread fell behind");
@@ -342,6 +346,8 @@ public sealed class Recorder : IDisposable
             _owner.Append(_converter.Convert(buffer));
         }
 
+        private static readonly TimeSpan CloseGiveUp = TimeSpan.FromSeconds(30);
+
         private void OnStopped(object? sender, StoppedEventArgs e)
         {
             // A device unplugged or taken over mid-take tears the capture thread down with an exception;
@@ -357,10 +363,17 @@ public sealed class Recorder : IDisposable
             // NAudio 3.1.0's capture thread writes Capturing right after IAudioClient::Start returns, which
             // overwrites a StopRecording that came earlier (the older WasapiCapture guarded this case,
             // WasapiRecorder does not). So keep asking until the thread itself says it has finished.
+            var giveUp = DateTime.UtcNow + CloseGiveUp;
             for (int wait = 10; ; wait = Math.Min(wait * 2, 250))
             {
                 _recorder.StopRecording();
                 if (await Task.WhenAny(_stopped.Task, Task.Delay(wait)).ConfigureAwait(false) == _stopped.Task) break;
+                if (DateTime.UtcNow > giveUp)
+                {
+                    // A driver stuck inside a call: stop asking. Disposing would join a thread that never ends.
+                    Log.Write("capture: the device never confirmed the stop; left alone");
+                    return;
+                }
             }
             Release();
         }
