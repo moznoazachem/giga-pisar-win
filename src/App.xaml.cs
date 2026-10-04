@@ -507,6 +507,9 @@ public partial class PisarApp : Application
             string why = Recorder.DeviceCount == 0
                 ? L.T("Windows не видит ни одного устройства записи. Подключите микрофон или включите его в Параметрах звука, раздел «Ввод».",
                       "Windows sees no recording device. Connect a microphone or enable one in Sound settings, Input.")
+                : ex is MicrophoneBlockedException
+                ? L.T("Похоже, запись звука запрещает антивирус или корпоративная политика, например Kaspersky («Предотвращение вторжений»). Разрешите Гига Писарю доступ к микрофону в настройках защиты или попросите об этом администратора.",
+                      "Recording seems to be blocked by an antivirus or a corporate policy, for example Kaspersky (Intrusion prevention). Allow Giga Pisar to use the microphone in its settings or ask your administrator.")
                 : ex is UnauthorizedAccessException || ex.Message.Contains("0x80070005") || ex.Message.Contains("denied", StringComparison.OrdinalIgnoreCase)
                 ? L.T("Windows не даёт доступ к микрофону. Параметры → Конфиденциальность и защита → Микрофон: включите «Доступ к микрофону» и «Разрешить классическим приложениям доступ к микрофону».",
                       "Windows denies microphone access. Settings, Privacy and security, Microphone: turn on microphone access and let desktop apps use the microphone.")

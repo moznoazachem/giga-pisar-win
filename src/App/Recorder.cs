@@ -145,6 +145,7 @@ public sealed class Recorder : IDisposable
         bool fmt = _deviceFormat, poll = _polling;
         var attempts = new[] { (fmt, poll), (!fmt, poll), (fmt, !poll), (!fmt, !poll) };
         Exception? first = null;
+        int failures = 0, invalidArg = 0;
         foreach (var (deviceFormat, polling) in attempts)
         {
             try
@@ -159,9 +160,14 @@ public sealed class Recorder : IDisposable
             catch (Exception e) when (e is not TimeoutException)   // a device that does not answer is not asked twice
             {
                 first ??= e;
+                failures++;
+                if (e.HResult == unchecked((int)0x80070057)) invalidArg++;
                 Log.Write($"capture attempt failed ({(deviceFormat ? "device format" : "16 kHz by Windows")}, {(polling ? "polled" : "event-driven")}): {e.GetType().Name}: {e.Message} (0x{e.HResult:X8})");
             }
         }
+        // Every way refused with E_INVALIDARG while the device itself answers: a security product
+        // (Kaspersky's "Intrusion prevention", a DLP policy) cutting capture in the audio chain.
+        if (failures == attempts.Length && invalidArg == attempts.Length) throw new MicrophoneBlockedException(first!);
         throw first!;   // the first failure is the one to explain to the user
     }
 
@@ -477,3 +483,8 @@ public sealed class Recorder : IDisposable
         };
     }
 }
+
+/// <summary>Capture refused in every form with E_INVALIDARG: most likely an antivirus or a corporate
+/// policy forbids this app to record (seen with Kaspersky Endpoint Security).</summary>
+public sealed class MicrophoneBlockedException(Exception inner)
+    : Exception("capture refused in every form (E_INVALIDARG): likely blocked by security software", inner);
