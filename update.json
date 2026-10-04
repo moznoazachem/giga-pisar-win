@@ -1,8 +1,8 @@
 {
-  "version": "1.0.8",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.8/GigaPisar-Setup.exe",
-  "sha256": "94dea4f7c77ee3a4434d592736270ec682572823dd57e5f35e7935ec7c117068",
-  "size": 55111365,
-  "notes": "Обновления проверяются строже: Писарь берёт их только со своей страницы на GitHub и перепроверяет файл перед установкой. Установщик теперь собирается на GitHub из открытого кода. Надиктованный текст больше не остаётся в буфере обмена.",
-  "notes_en": "Stricter update check: Pisar takes updates only from its own GitHub page and re-checks the file before installing. The installer is now built on GitHub from the open source code. Dictated text no longer stays on the clipboard."
+  "version": "1.0.9",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.9/GigaPisar-Setup.exe",
+  "sha256": "f405cc1d33f266a69c9a994ce9fc0abf83493589a937254035c7a7d8c7ac686a",
+  "size": 55197119,
+  "notes": "Писарь занимает почти вдвое меньше памяти: около 390 МБ вместо 590, распознавание то же. Микрофон открывается современным способом Windows, и запись теперь работает там, где её блокировал Касперский. На компьютерах с 8 ГБ памяти и меньше модель освобождает память после 30 минут простоя, это можно поменять в настройках. Спасибо digit-rb за эти доработки.",
+  "notes_en": "Pisar takes almost half the memory: about 390 MB instead of 590, same recognition. The microphone opens the modern Windows way, so recording now works where Kaspersky blocked it. On computers with 8 GB of memory or less the model frees its memory after 30 idle minutes; change it in the settings. Thanks to digit-rb for this work."
 }
