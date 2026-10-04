@@ -31,7 +31,6 @@ public sealed class KeyboardHook : IDisposable
     /// <summary>Raised on the hook thread; handlers must return immediately (marshal to the UI thread).</summary>
     public event Action? Pressed;
     public event Action? Released;
-    public event Action? Cancelled;
 
     public void CheckReleasedKey()
     {
@@ -92,12 +91,6 @@ public sealed class KeyboardHook : IDisposable
                 int vk = info.vkCode == Native.VK_CONTROL
                     ? (info.flags & Native.LLKHF_EXTENDED) != 0 ? 0xA3 : 0xA2
                     : (int)info.vkCode;
-
-                if (keyDown && vk == 0x1B && _down)
-                {
-                    _down = false;
-                    Cancelled?.Invoke();
-                }
 
                 if (vk == Native.VK_LCONTROL && keyUp && _activeWinVk != 0 && _down)
                 {

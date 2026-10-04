@@ -338,7 +338,6 @@ public partial class PisarApp : Application
             _hook = new KeyboardHook(_settings.HotkeyVk);
             _hook.Pressed += () => Dispatcher.BeginInvoke(() => _ = HandlePressAsync());
             _hook.Released += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync());
-            _hook.Cancelled += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync(discard: true));
         }
         catch (Exception ex)
         {
@@ -468,7 +467,7 @@ public partial class PisarApp : Application
         return $"{Db(samples, 0, half)}/{Db(samples, half, 2 * half)}/{Db(samples, 2 * half, samples.Length)}";
     }
 
-    private async Task HandleReleaseAsync(bool discard = false, long? expectedId = null)
+    private async Task HandleReleaseAsync(long? expectedId = null)
     {
         if (!_recorder.HasTake || _busy) return;
         if (expectedId.HasValue && _recorder.RecordingId != expectedId.Value) return;
@@ -478,9 +477,8 @@ public partial class PisarApp : Application
         var overlay = _settings.ShowOverlay ? _overlay : null;
         try
         {
-            if (discard) overlay?.HideNow();
-            var samples = await _recorder.StopAsync(discard);
-            if (discard || _lifetime.IsCancellationRequested) return;
+            var samples = await _recorder.StopAsync();
+            if (_lifetime.IsCancellationRequested) return;
             overlay?.ShowRecognizing();
 
             float peak = _recorder.TakePeak;
