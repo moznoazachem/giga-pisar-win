@@ -1,8 +1,8 @@
 {
-  "version": "1.0.9",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.9/GigaPisar-Setup.exe",
-  "sha256": "f405cc1d33f266a69c9a994ce9fc0abf83493589a937254035c7a7d8c7ac686a",
-  "size": 55197119,
-  "notes": "Писарь занимает почти вдвое меньше памяти: около 390 МБ вместо 590, распознавание то же. Микрофон открывается современным способом Windows, и запись теперь работает там, где её блокировал Касперский. На компьютерах с 8 ГБ памяти и меньше модель освобождает память после 30 минут простоя, это можно поменять в настройках.",
-  "notes_en": "Pisar takes almost half the memory: about 390 MB instead of 590, same recognition. The microphone opens the modern Windows way, so recording now works where Kaspersky blocked it. On computers with 8 GB of memory or less the model frees its memory after 30 idle minutes; change it in the settings."
+  "version": "1.0.10",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.10/GigaPisar-Setup.exe",
+  "sha256": "2e3cf1a82be36316196d5b099c3b6a51ab01ae129f74e98c641b36729baecd65",
+  "size": 55199430,
+  "notes": "Если микрофон не открывается обычным способом, Писарь пробует ещё два запасных, а в журнал пишет точные коды ошибок Windows. Для сложных случаев есть диагностика: GigaPisar.exe --mic-probe отчёт.txt",
+  "notes_en": "If the microphone does not open the usual way, Pisar tries two more fallbacks and logs exact Windows error codes. For hard cases there is a diagnostic: GigaPisar.exe --mic-probe report.txt"
 }
