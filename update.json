@@ -1,8 +1,8 @@
 {
-  "version": "1.0.11",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.11/GigaPisar-Setup.exe",
-  "sha256": "04117cb06a3a78521229412a56a8656034482b55d0666b0dc4e1ab82a30d65bd",
-  "size": 55195892,
-  "notes": "Если запись звука запрещает антивирус или корпоративная политика (например, Kaspersky «Предотвращение вторжений»), Писарь теперь так и говорит и подсказывает, что сделать, вместо непонятной ошибки.",
-  "notes_en": "If recording is blocked by an antivirus or a corporate policy (for example Kaspersky Intrusion prevention), Pisar now says so and tells what to do, instead of a cryptic error."
+  "version": "1.0.12",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.12/GigaPisar-Setup.exe",
+  "sha256": "fbdc48c61afac9ed1bd7dd9169c4af559c2160024158fa7027179ae67ddb9e89",
+  "size": 55195065,
+  "notes": "Вставка в виртуальные машины: в окна VirtualBox, VMware и Hyper-V Писарь вставляет текст так, чтобы он дошёл до гостевой системы. Новая настройка «Оставлять надиктованное в буфере обмена». В облачном Мозге появился Z.ai (GLM).",
+  "notes_en": "Pasting into virtual machines: in VirtualBox, VMware and Hyper-V windows Pisar pastes so the text reaches the guest. New setting “Keep dictation on the clipboard”. The cloud Brain now lists Z.ai (GLM)."
 }
