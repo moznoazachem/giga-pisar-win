@@ -631,6 +631,10 @@ public partial class PisarApp : Application
             else if (text.Length > 0)
                 Log.Write($"insert as is: simple={_settings.SimpleSyntax} selection={editedSelection} command={brainCommand}");
 
+            // A trailing space, so the next dictation does not stick to this one ("работает.Хотя").
+            // Not when the text replaces a selection: there it would be one space too many.
+            if (text.Length > 0 && !editedSelection && !char.IsWhiteSpace(text[^1])) text += " ";
+
             if (text.Length > 0)
             {
                 overlay?.HideNow();
