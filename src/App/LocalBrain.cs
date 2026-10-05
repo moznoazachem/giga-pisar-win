@@ -258,9 +258,31 @@ public static class LocalBrain
         TouchIdle();
     }
 
+    // llama-server needs the Visual C++ runtime, which a clean Windows lacks. The app ships these
+    // files next to itself, but the engine runs from its own folder and does not look there.
+    private static readonly string[] VcRuntime = ["msvcp140.dll", "msvcp140_1.dll", "vcruntime140.dll", "vcruntime140_1.dll"];
+
+    private static void ProvideVcRuntime()
+    {
+        foreach (var dll in VcRuntime)
+        {
+            var from = Path.Combine(AppContext.BaseDirectory, dll);
+            var to = Path.Combine(EngineDir, dll);
+            try
+            {
+                if (File.Exists(from) && !File.Exists(to)) File.Copy(from, to);
+            }
+            catch (Exception e)
+            {
+                Log.Write($"brain: could not copy {dll}: {e.Message}");
+            }
+        }
+    }
+
     private static Process StartProcess()
     {
         Stop();
+        ProvideVcRuntime();
         _port = FreePort();
         _apiKey = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
         var psi = new ProcessStartInfo(ServerExe)
