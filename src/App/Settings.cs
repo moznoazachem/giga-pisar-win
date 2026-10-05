@@ -30,6 +30,9 @@ public sealed class Settings
     /// <summary>A single dictated sentence goes in lowercase and without the closing period, like a chat reply.</summary>
     public bool SimpleSyntax { get; set; }
 
+    /// <summary>Leave each dictation on the clipboard as an ordinary copy (VMs, remote desktops).</summary>
+    public bool KeepOnClipboard { get; set; }
+
     /// <summary>Read-only migration from 1.0.3, where the server Brain had a single on/off switch and cleaned every take.</summary>
     [JsonPropertyName("CleanupEnabled")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

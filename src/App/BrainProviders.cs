@@ -25,9 +25,11 @@ public static partial class BrainProviders
         ["gemini-2.5-flash", "gemini-2.0-flash"], "https://aistudio.google.com/apikey");
     public static readonly BrainProvider Anthropic = new("anthropic", "Anthropic (Claude)", "https://api.anthropic.com/v1",
         ["claude-haiku-4-5"], "https://console.anthropic.com/settings/keys");
+    public static readonly BrainProvider ZAi = new("zai", "Z.ai (GLM)", "https://api.z.ai/api/paas/v4",
+        ["glm-5", "glm-4.6", "glm-4.5"], "https://z.ai/manage-apikey/apikey-list");
     public static readonly BrainProvider Custom = new("custom", "", "", [], "");
 
-    public static readonly BrainProvider[] All = [DeepSeek, OpenRouter, OpenAI, Groq, Gemini, Anthropic, Custom];
+    public static readonly BrainProvider[] All = [DeepSeek, OpenRouter, OpenAI, Groq, Gemini, Anthropic, ZAi, Custom];
 
     public static string Title(BrainProvider p) => p.IsCustom ? L.T("Свой сервер (LM Studio, Ollama…)", "Own server (LM Studio, Ollama…)") : p.Name;
 

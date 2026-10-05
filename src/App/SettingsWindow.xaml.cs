@@ -98,6 +98,10 @@ public partial class SettingsWindow : Window
         SimpleSyntaxBox.ToolTip = L.T("Как реплика в переписке: «ок, буду в пять». Вопрос и восклицательный знак остаются.",
                                       "Like a chat reply: \"ok, see you at five\". Question and exclamation marks stay.");
         SimpleSyntaxBox.IsChecked = _settings.SimpleSyntax;
+        KeepOnClipboardBox.Content = L.T("Оставлять надиктованное в буфере обмена", "Keep dictation on the clipboard");
+        KeepOnClipboardBox.ToolTip = L.T("Текст вставляется как обычно и остаётся в буфере обычной копией. Удобно для удалённых рабочих столов. В окна VirtualBox, VMware и Hyper-V Писарь и так кладёт обычную копию.",
+                                         "The text is inserted as usual and stays on the clipboard as an ordinary copy. Handy for remote desktops. For VirtualBox, VMware and Hyper-V windows Pisar does this anyway.");
+        KeepOnClipboardBox.IsChecked = _settings.KeepOnClipboard;
         AutostartBox.Content = L.T("Запускать при входе в Windows", "Start when I sign in to Windows");
         KeepBox.Content = L.T("Сохранять последнюю запись для разбора ошибок", "Keep the last recording for troubleshooting");
         OverlayBox.IsChecked = _settings.ShowOverlay;
@@ -217,6 +221,12 @@ public partial class SettingsWindow : Window
     {
         _unpin();
         UnpinButton.IsEnabled = false;
+    }
+
+    private void KeepOnClipboard_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.KeepOnClipboard = KeepOnClipboardBox.IsChecked == true;
+        _apply();
     }
 
     private void SimpleSyntax_Click(object sender, RoutedEventArgs e)

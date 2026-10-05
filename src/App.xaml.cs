@@ -635,6 +635,7 @@ public partial class PisarApp : Application
             {
                 overlay?.HideNow();
                 var mode = _settings.InsertMode;
+                TextInserter.KeepOnClipboard = _settings.KeepOnClipboard;
                 var result = await Task.Run(() => TextInserter.Insert(text, mode, _lifetime.Token));
                 if (result == InsertResult.Blocked)
                     Hint(L.T("Это окно запущено от администратора, вставить туда нельзя. Текст лежит в буфере обмена.",

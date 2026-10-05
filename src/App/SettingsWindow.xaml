@@ -79,6 +79,7 @@
                         <Button x:Name="UnpinButton" Margin="12,0,0,0" Padding="10,2" FontSize="12" Click="Unpin_Click"/>
                     </StackPanel>
                     <CheckBox x:Name="SimpleSyntaxBox" Margin="0,10,0,0" Click="SimpleSyntax_Click"/>
+                    <CheckBox x:Name="KeepOnClipboardBox" Margin="0,10,0,0" Click="KeepOnClipboard_Click"/>
                     <CheckBox x:Name="AutostartBox" Margin="0,10,0,0" Click="Autostart_Click"/>
                     <CheckBox x:Name="UpdatesBox" Margin="0,10,0,0" Click="Updates_Click"/>
                     <CheckBox x:Name="KeepBox" Margin="0,10,0,0" Click="Keep_Click"/>

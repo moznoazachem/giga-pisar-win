@@ -23,12 +23,42 @@ public static class TextInserter
     private const int BatchPauseMs = 8;
     private const int ClipboardRestoreDelayMs = 800;
     private const int ErrorAccessDenied = 5;
+    private const int VmClipboardSyncMs = 250;
     private static readonly SemaphoreSlim ClipboardGate = new(1, 1);
+
+    /// <summary>Leave each dictation on the clipboard as an ordinary copy (the setting).</summary>
+    public static bool KeepOnClipboard { get; set; }
+
+    // Virtual machine and remote desktop windows: typed characters never reach the guest, and
+    // their shared clipboard skips items marked "keep out of clipboard history".
+    private static readonly HashSet<string> VmProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "VirtualBoxVM", "VirtualBox", "vmware-vmx", "vmware", "vmconnect", "mstsc", "msrdc",
+        "qemu-system-x86_64", "qemu-system-aarch64", "prl_client_app",
+    };
+
+    private static bool ForegroundIsVirtualMachine()
+    {
+        try
+        {
+            var fg = Native.GetForegroundWindow();
+            if (fg == IntPtr.Zero) return false;
+            Native.GetWindowThreadProcessId(fg, out uint pid);
+            using var p = System.Diagnostics.Process.GetProcessById((int)pid);
+            return VmProcesses.Contains(p.ProcessName);
+        }
+        catch
+        {
+            return false;
+        }
+    }
 
     public static InsertResult Insert(string text, InsertMode mode, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(text)) return InsertResult.Done;
-        return mode == InsertMode.Paste ? Paste(text, cancellationToken) : Type(text);
+        bool vm = ForegroundIsVirtualMachine();
+        if (vm) Log.Write("insert: virtual machine window, pasting a plain copy");
+        return mode == InsertMode.Paste || vm ? Paste(text, cancellationToken, plain: vm) : Type(text);
     }
 
     public static InsertResult Type(string text)
@@ -57,8 +87,9 @@ public static class TextInserter
         return InsertResult.Done;
     }
 
-    public static InsertResult Paste(string text, CancellationToken cancellationToken = default)
+    public static InsertResult Paste(string text, CancellationToken cancellationToken = default, bool plain = false)
     {
+        plain |= KeepOnClipboard;
         ClipboardGate.Wait(cancellationToken);
         bool restoreOwnsGate = false;
         try
@@ -76,10 +107,13 @@ public static class TextInserter
                 {
                     var data = new DataObject();
                     data.SetData(DataFormats.UnicodeText, text);
-                    // Windows honours these formats: no Clipboard History entry, no cloud sync.
-                    data.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(new byte[4]));
-                    data.SetData("CanIncludeInClipboardHistory", new MemoryStream(new byte[4]));
-                    data.SetData("CanUploadToCloudClipboard", new MemoryStream(new byte[4]));
+                    if (!plain)
+                    {
+                        // Windows honours these formats: no Clipboard History entry, no cloud sync.
+                        data.SetData("ExcludeClipboardContentFromMonitorProcessing", new MemoryStream(new byte[4]));
+                        data.SetData("CanIncludeInClipboardHistory", new MemoryStream(new byte[4]));
+                        data.SetData("CanUploadToCloudClipboard", new MemoryStream(new byte[4]));
+                    }
                     Clipboard.SetDataObject(data, true);
                     sequence = Native.GetClipboardSequenceNumber();
                     return true;
@@ -91,6 +125,8 @@ public static class TextInserter
                 }
             });
             if (!placed) return Type(text);
+            // A VM's shared clipboard syncs to the guest on its own schedule: give it a moment.
+            if (plain && !KeepOnClipboard) Thread.Sleep(VmClipboardSyncMs);
 
             var ok = Send(new[]
             {
@@ -103,6 +139,7 @@ public static class TextInserter
 
             // Recording may resume as soon as Ctrl+V is sent. Keep clipboard operations serialized
             // until the target has had time to read it, even when there is no snapshot to restore.
+            if (plain) return InsertResult.Done;   // the dictation stays, as asked or for the VM's guest
             restoreOwnsGate = true;
             _ = RestoreClipboardAsync(ui, saved, sequence, cancellationToken);
             return InsertResult.Done;
@@ -240,9 +277,19 @@ public static class TextInserter
         return false;
     }
 
+    // The scan code goes along with the virtual key, as from a real keyboard: virtual machines
+    // (VirtualBox) read scan codes and ignore keys that come without one.
     private static Native.INPUT Key(ushort vk, ushort scan, uint flags) => new()
     {
         type = Native.INPUT_KEYBOARD,
-        u = new Native.INPUTUNION { ki = new Native.KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags } },
+        u = new Native.INPUTUNION
+        {
+            ki = new Native.KEYBDINPUT
+            {
+                wVk = vk,
+                wScan = scan == 0 && vk != 0 && (flags & Native.KEYEVENTF_UNICODE) == 0 ? (ushort)Native.MapVirtualKey(vk, 0) : scan,
+                dwFlags = flags,
+            },
+        },
     };
 }
