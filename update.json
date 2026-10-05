@@ -1,8 +1,8 @@
 {
-  "version": "1.0.13",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.13/GigaPisar-Setup.exe",
-  "sha256": "31c898a2f2d31ed9c38ecc7fce9a6d2eb1b52768b20728da154a9ee5595422da",
-  "size": 55201384,
-  "notes": "После каждой фразы Писарь ставит пробел, и следующая диктовка больше не прилипает к точке.",
-  "notes_en": "Pisar now adds a space after each phrase, so the next dictation no longer sticks to the period."
+  "version": "1.0.14",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.14/GigaPisar-Setup.exe",
+  "sha256": "0e4d2b9e607ceabb7e487573ca80c1df19feeb099b6a2425e4054eec0b49c948",
+  "size": 55207746,
+  "notes": "Локальный Мозг запускается и на компьютерах без библиотеки Microsoft Visual C++: раньше там появлялась ошибка VCRUNTIME140.dll.",
+  "notes_en": "The local Brain now starts on computers without the Microsoft Visual C++ library: before, they showed a VCRUNTIME140.dll error."
 }
