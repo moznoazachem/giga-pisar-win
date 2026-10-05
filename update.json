@@ -1,8 +1,8 @@
 {
-  "version": "1.0.12",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.12/GigaPisar-Setup.exe",
-  "sha256": "fbdc48c61afac9ed1bd7dd9169c4af559c2160024158fa7027179ae67ddb9e89",
-  "size": 55195065,
-  "notes": "Вставка в виртуальные машины: в окна VirtualBox, VMware и Hyper-V Писарь вставляет текст так, чтобы он дошёл до гостевой системы. Новая настройка «Оставлять надиктованное в буфере обмена». В облачном Мозге появился Z.ai (GLM).",
-  "notes_en": "Pasting into virtual machines: in VirtualBox, VMware and Hyper-V windows Pisar pastes so the text reaches the guest. New setting “Keep dictation on the clipboard”. The cloud Brain now lists Z.ai (GLM)."
+  "version": "1.0.13",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.13/GigaPisar-Setup.exe",
+  "sha256": "31c898a2f2d31ed9c38ecc7fce9a6d2eb1b52768b20728da154a9ee5595422da",
+  "size": 55201384,
+  "notes": "После каждой фразы Писарь ставит пробел, и следующая диктовка больше не прилипает к точке.",
+  "notes_en": "Pisar now adds a space after each phrase, so the next dictation no longer sticks to the period."
 }
