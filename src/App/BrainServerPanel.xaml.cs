@@ -203,8 +203,11 @@ public partial class BrainServerPanel : UserControl
             bool keyRejected = ex is System.Net.Http.HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden };
             if (keyRejected)
             {
-                Status.Text = L.T($"{p.Name} не принял ключ. Проверьте, что ключ от этого сервиса и скопирован целиком.",
-                                  $"{p.Name} rejected the key. Check that it is for this service and copied in full.");
+                // The server's reason when it gave one: a blocked country reads very differently from a typo.
+                var reason = string.IsNullOrWhiteSpace(ex.Message) ? "" : $" Ответ сервера: «{ex.Message.Trim().TrimEnd('.')}».";
+                var reasonEn = string.IsNullOrWhiteSpace(ex.Message) ? "" : $" The server says: “{ex.Message.Trim().TrimEnd('.')}”.";
+                Status.Text = L.T($"{p.Name} не принял ключ. Проверьте, что ключ от этого сервиса и скопирован целиком.{reason}",
+                                  $"{p.Name} rejected the key. Check that it is for this service and copied in full.{reasonEn}");
             }
             else
             {

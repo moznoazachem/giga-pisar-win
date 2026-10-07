@@ -128,19 +128,18 @@ public static class SpeechCleanup
     private static async Task<string> CleanCoreAsync(string text, Uri url, string apiKey, string model, string prompt,
         IDictionary<string, object>? extra, CancellationToken cancellationToken)
     {
-        bool withReasoning = _sendReasoningEffort;
+        // Gemini 3 cannot switch thinking off and answers "none" with 400; it thinks little by default.
+        bool withReasoning = _sendReasoningEffort && !url.Host.EndsWith("googleapis.com", StringComparison.OrdinalIgnoreCase);
         using var response = await PostAsync(url!, apiKey, model, prompt, text, withReasoning, extra, cancellationToken);
         if (withReasoning && response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity)
         {
-            // Only drop the parameter when the server complains about it; a wrong model name is a real error.
+            // Servers word it differently ("reasoning_effort", "invalid argument"), so any 400 gets one
+            // retry without the parameter. If that one fails too, its error is the real one.
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (body.Contains("reasoning", StringComparison.OrdinalIgnoreCase))
-            {
-                Log.Write("cleanup server rejected reasoning_effort; retrying without it");
-                _sendReasoningEffort = false;
-                using var retry = await PostAsync(url!, apiKey, model, prompt, text, false, extra, cancellationToken);
-                return await ReadContentAsync(retry, cancellationToken);
-            }
+            Log.Write($"cleanup server {(int)response.StatusCode} with reasoning_effort ({ServerMessage(body)}); retrying without it");
+            using var retry = await PostAsync(url!, apiKey, model, prompt, text, false, extra, cancellationToken);
+            if (retry.IsSuccessStatusCode) _sendReasoningEffort = false;
+            return await ReadContentAsync(retry, cancellationToken);
         }
         return await ReadContentAsync(response, cancellationToken);
     }
@@ -244,7 +243,13 @@ public static class SpeechCleanup
         if (!string.IsNullOrWhiteSpace(apiKey))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey.Trim());
         using var response = await Client.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            // Keep the server's own words: "wrong key", "not available in your country" and the like.
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            Log.Write($"brain models {(int)response.StatusCode}: {ServerMessage(body)}");
+            throw new HttpRequestException(ServerMessage(body), null, response.StatusCode);
+        }
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         return document.RootElement.GetProperty("data").EnumerateArray()

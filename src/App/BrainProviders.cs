@@ -22,7 +22,7 @@ public static partial class BrainProviders
     public static readonly BrainProvider Groq = new("groq", "Groq", "https://api.groq.com/openai/v1",
         ["llama-3.3-70b-versatile"], "https://console.groq.com/keys");
     public static readonly BrainProvider Gemini = new("gemini", "Google Gemini", "https://generativelanguage.googleapis.com/v1beta/openai",
-        ["gemini-2.5-flash", "gemini-2.0-flash"], "https://aistudio.google.com/apikey");
+        ["gemini-3.8-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"], "https://aistudio.google.com/apikey");
     public static readonly BrainProvider Anthropic = new("anthropic", "Anthropic (Claude)", "https://api.anthropic.com/v1",
         ["claude-haiku-4-5"], "https://console.anthropic.com/settings/keys");
     public static readonly BrainProvider ZAi = new("zai", "Z.ai (GLM)", "https://api.z.ai/api/paas/v4",
@@ -43,7 +43,7 @@ public static partial class BrainProviders
         if (key.StartsWith("sk-or-")) return OpenRouter;
         if (key.StartsWith("sk-ant-")) return Anthropic;
         if (key.StartsWith("gsk_")) return Groq;
-        if (key.StartsWith("AIza")) return Gemini;
+        if (key.StartsWith("AIza") || key.StartsWith("AQ.")) return Gemini;
         if (DeepSeekKey().IsMatch(key)) return DeepSeek;
         // Plain "sk-" is used by several services; only OpenAI's long keys are a safe guess.
         if (key.StartsWith("sk-proj-") || key.StartsWith("sk-svcacct-") || (key.StartsWith("sk-") && key.Length >= 45)) return OpenAI;
