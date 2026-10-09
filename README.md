@@ -97,24 +97,13 @@ Unit tests of the microphone capture need no microphone and run on Windows, Linu
 dotnet test tests/GigaPisar.Tests
 ```
 
-## Code signing policy
+## Code signing
 
-Release installers are to be signed through SignPath Foundation (application
-in progress; this section will name the certificate once signing is active).
+Release installers are not signed yet, so Windows shows "Windows protected your PC" on the
+first run: choose "More info", then "Run anyway". Installers are built only by the GitHub
+Actions workflow above, from a tagged commit of this repository, and update.json carries the
+SHA-256 of that exact file.
 
-- Only installers built by the GitHub Actions workflow above, from a tagged
-  commit of this repository, are submitted for signing; nothing built on a
-  personal machine is signed.
-- Every signing request is approved by hand before the signed installer is
-  published.
-
-Team roles:
-
-- Authors, committers and reviewers: [@moznoazachem](https://github.com/moznoazachem).
-  Changes from anyone else come as pull requests and are reviewed before merge.
-- Approver of releases: [@moznoazachem](https://github.com/moznoazachem).
-
-All team members use multi-factor authentication on GitHub.
 
 ## Privacy
 
