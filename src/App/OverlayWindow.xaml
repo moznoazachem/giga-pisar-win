@@ -18,7 +18,11 @@
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock x:Name="Caption" Visibility="Collapsed" Margin="0,0,10,0" VerticalAlignment="Center"
                            FontSize="12.5" FontFamily="Segoe UI Variable Text, Segoe UI"/>
+                <TextBlock x:Name="LockIcon" Visibility="Collapsed" Margin="0,0,8,0" VerticalAlignment="Center"
+                           Text="&#xE72E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Foreground="#FF0A84FF"/>
                 <StackPanel x:Name="Bars" Orientation="Horizontal" Height="22" VerticalAlignment="Center"/>
+                <TextBlock x:Name="Elapsed" Visibility="Collapsed" Margin="8,0,0,0" VerticalAlignment="Center"
+                           FontSize="12" FontFamily="Segoe UI Variable Text, Segoe UI" Opacity="0.6"/>
             </StackPanel>
             <TextBlock x:Name="Label" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"
                        Foreground="#D9000000" FontSize="12.5" FontFamily="Segoe UI Variable Text, Segoe UI"/>

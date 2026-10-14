@@ -27,6 +27,10 @@ public sealed class KeyboardHook : IDisposable
 
     public int HotkeyVk { get => _hotkeyVk; set => _hotkeyVk = value; }
 
+    /// <summary>While set, Esc is swallowed and reported: it cancels a hands-free recording.</summary>
+    public volatile bool CaptureEscape;
+    public event Action? EscapePressed;
+
     /// <summary>Raised on the hook thread; handlers must return immediately (marshal to the UI thread).</summary>
     public event Action? Pressed;
     public event Action? Released;
@@ -73,6 +77,12 @@ public sealed class KeyboardHook : IDisposable
                 int vk = info.vkCode == Native.VK_CONTROL
                     ? (info.flags & Native.LLKHF_EXTENDED) != 0 ? 0xA3 : 0xA2
                     : (int)info.vkCode;
+
+                if (CaptureEscape && vk == 0x1B)
+                {
+                    if (keyDown) EscapePressed?.Invoke();
+                    return 1;
+                }
 
                 if (vk == Native.VK_LCONTROL && keyUp && _activeWinVk != 0 && _down)
                 {

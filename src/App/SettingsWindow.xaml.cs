@@ -98,6 +98,11 @@ public partial class SettingsWindow : Window
         SimpleSyntaxBox.ToolTip = L.T("Как реплика в переписке: «ок, буду в пять». Вопрос и восклицательный знак остаются.",
                                       "Like a chat reply: \"ok, see you at five\". Question and exclamation marks stay.");
         SimpleSyntaxBox.IsChecked = _settings.SimpleSyntax;
+        string key = Settings.HotkeyTitle(_settings.HotkeyVk);
+        HandsFreeBox.Content = L.T("Запись без удержания", "Hands-free recording");
+        HandsFreeHint.Text = L.T($"Дважды быстро нажмите {key}, и запись пойдёт сама, держать клавишу не нужно. Удобно для длинного текста. Остановить: нажать {key} ещё раз, отменить: Esc. Пока запись идёт сама, на плашке видны замочек и время. Через 5 минут запись остановится сама.",
+                                 $"Quickly double-press {key} and the recording keeps going on its own, no need to hold the key. Handy for long text. Press {key} again to stop, Esc to cancel. While it runs on its own, the panel shows a lock and the time. It stops by itself after 5 minutes.");
+        HandsFreeBox.IsChecked = _settings.HandsFree;
         KeepOnClipboardBox.Content = L.T("Оставлять надиктованное в буфере обмена", "Keep dictation on the clipboard");
         KeepOnClipboardBox.ToolTip = L.T("Текст вставляется как обычно и остаётся в буфере обычной копией. Удобно для удалённых рабочих столов. В окна VirtualBox, VMware и Hyper-V Писарь и так кладёт обычную копию.",
                                          "The text is inserted as usual and stays on the clipboard as an ordinary copy. Handy for remote desktops. For VirtualBox, VMware and Hyper-V windows Pisar does this anyway.");
@@ -221,6 +226,12 @@ public partial class SettingsWindow : Window
     {
         _unpin();
         UnpinButton.IsEnabled = false;
+    }
+
+    private void HandsFree_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.HandsFree = HandsFreeBox.IsChecked == true;
+        _apply();
     }
 
     private void KeepOnClipboard_Click(object sender, RoutedEventArgs e)

@@ -27,6 +27,29 @@ public partial class OverlayWindow : Window
     private const double WindowMargin = 14;      // room for the shadow
     private const int HintMs = 2200;
     private static readonly double BarsWidth = BarCount * BarWidth + (BarCount - 1) * BarGap;
+    private const double LockedExtra = 64;      // lock icon, time and their margins
+
+    /// <summary>Hands-free recording: a lock on the left and the elapsed time on the right.</summary>
+    private DateTime? _lockedSince;
+    private double ListeningWidth => BarsWidth + (_lockedSince == null ? 0 : LockedExtra);
+
+    public void SetLocked(DateTime? since)
+    {
+        _lockedSince = since;
+        var v = since == null ? Visibility.Collapsed : Visibility.Visible;
+        LockIcon.Visibility = v;
+        Elapsed.Visibility = v;
+        Elapsed.Foreground = Label.Foreground;
+        UpdateElapsed();
+        if (Bars.Visibility == Visibility.Visible && Caption.Visibility != Visibility.Visible) Resize(ListeningWidth);
+    }
+
+    private void UpdateElapsed()
+    {
+        if (_lockedSince is not { } since) return;
+        var t = DateTime.UtcNow - since;
+        Elapsed.Text = $"{(int)t.TotalMinutes}:{t.Seconds:00}";
+    }
 
     // The website's wave palette, light to teal, one gradient per bar.
     private static readonly (string top, string bottom)[] Palette =
@@ -96,6 +119,9 @@ public partial class OverlayWindow : Window
         Label.Visibility = Visibility.Collapsed;
         Caption.Visibility = Visibility.Collapsed;
         Bars.Visibility = Visibility.Visible;
+        _lockedSince = null;
+        LockIcon.Visibility = Visibility.Collapsed;
+        Elapsed.Visibility = Visibility.Collapsed;
         Resize(BarsWidth);
         Array.Clear(_heights);
         _smoothed = 0;
@@ -117,6 +143,9 @@ public partial class OverlayWindow : Window
 
     public void HideNow()
     {
+        _lockedSince = null;
+        LockIcon.Visibility = Visibility.Collapsed;
+        Elapsed.Visibility = Visibility.Collapsed;
         _timer.Stop();
         _recorder = null;
         _busyRipple = false;
@@ -145,11 +174,11 @@ public partial class OverlayWindow : Window
         Caption.Text = text;
         Caption.Visibility = Visibility.Visible;
         Caption.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Resize(Math.Ceiling(Caption.DesiredSize.Width) + 10 + BarsWidth);
+        Resize(Math.Ceiling(Caption.DesiredSize.Width) + 10 + ListeningWidth);
         await Task.Delay(ms);
         if (mine != _captionSerial || Caption.Visibility != Visibility.Visible || Bars.Visibility != Visibility.Visible) return;
         Caption.Visibility = Visibility.Collapsed;
-        Resize(BarsWidth);
+        Resize(ListeningWidth);
     }
 
     private int _captionSerial;
@@ -170,6 +199,8 @@ public partial class OverlayWindow : Window
         _busyRipple = false;
         ApplyTheme();
         Bars.Visibility = Visibility.Collapsed;
+        LockIcon.Visibility = Visibility.Collapsed;
+        Elapsed.Visibility = Visibility.Collapsed;
         Label.Text = text;
         Label.Visibility = Visibility.Visible;
         Label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -259,6 +290,7 @@ public partial class OverlayWindow : Window
             return;
         }
 
+        UpdateElapsed();
         float level = _demo
             ? (float)(0.25 + 0.55 * Math.Abs(Math.Sin(Environment.TickCount64 / 260.0)) * _rng.NextDouble() + 0.2 * _rng.NextDouble())
             : _recorder?.Level ?? 0;

@@ -33,6 +33,11 @@ public sealed class Settings
     /// <summary>Leave each dictation on the clipboard as an ordinary copy (VMs, remote desktops).</summary>
     public bool KeepOnClipboard { get; set; }
 
+    /// <summary>A quick double press of the dictation key records without holding it (#13). On by default.</summary>
+    public bool HandsFree { get; set; } = true;
+    /// <summary>How many times the "stop with the key, cancel with Esc" caption was shown (first three only).</summary>
+    public int HandsFreeHints { get; set; }
+
     /// <summary>Read-only migration from 1.0.3, where the server Brain had a single on/off switch and cleaned every take.</summary>
     [JsonPropertyName("CleanupEnabled")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

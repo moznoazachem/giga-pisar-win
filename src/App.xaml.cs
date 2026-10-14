@@ -52,6 +52,13 @@ public partial class PisarApp : Application
     private KeyboardHook? _hook;
     private readonly Recorder _recorder = new();
     private OverlayWindow? _overlay;
+
+    // Hands-free recording (#13): a quick double press records without holding the key.
+    // A single press stops, Esc cancels. Mirrors the macOS app.
+    private bool _locked, _lockPending, _swallowRelease;
+    private long _pressTick, _lastTapUpTick;
+    private const long DoubleTapMs = 350, TapMaxMs = 300;
+    private string? _lastText;
     private SettingsWindow? _settingsWindow;
     private UpdateWindow? _updateWindow;
     private readonly CancellationTokenSource _lifetime = new();
@@ -410,12 +417,13 @@ public partial class PisarApp : Application
         _idleTimer.Tick += (_, _) => FreeIdleModel();
         _idleTimer.Start();
 
-        _recorder.TakeTooLong += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync());
+        _recorder.TakeTooLong += () => Dispatcher.BeginInvoke(() => { EndLock(); _ = HandleReleaseAsync(); });
         try
         {
             _hook = new KeyboardHook(_settings.HotkeyVk);
             _hook.Pressed += () => Dispatcher.BeginInvoke(() => _ = HandlePressAsync());
-            _hook.Released += () => Dispatcher.BeginInvoke(() => _ = HandleReleaseAsync());
+            _hook.Released += () => Dispatcher.BeginInvoke(OnHotkeyReleased);
+            _hook.EscapePressed += () => Dispatcher.BeginInvoke(() => _ = CancelHandsFreeAsync());
         }
         catch (Exception ex)
         {
@@ -491,7 +499,26 @@ public partial class PisarApp : Application
 
     private async Task HandlePressAsync()
     {
-        if (_busy || !_modelReady || _recorder.IsRecording) return;
+        if (_locked)
+        {
+            // A single press ends a hands-free recording; its release is ours too.
+            _swallowRelease = true;
+            _lastTapUpTick = 0;
+            EndLock();
+            _ = HandleReleaseAsync();
+            return;
+        }
+        long now = Environment.TickCount64;
+        bool doubleTap = _settings.HandsFree && _lastTapUpTick != 0 && now - _lastTapUpTick < DoubleTapMs;
+        _lastTapUpTick = 0;
+        _pressTick = now;
+        if (doubleTap)
+        {
+            _lockPending = true;
+            // The first tap's tiny take may still be closing the device.
+            for (int i = 0; i < 40 && _busy; i++) await Task.Delay(15);
+        }
+        if (_busy || !_modelReady || _recorder.IsRecording) { _lockPending = false; return; }
         // A model freed while Pisar sat idle loads again now, while the user speaks; the release waits for it.
         if (!_model.IsLoaded) Log.Write("model: loading again for this take");
         _ = _model.GetAsync();
@@ -515,16 +542,72 @@ public partial class PisarApp : Application
                       "Windows denies microphone access. Settings, Privacy and security, Microphone: turn on microphone access and let desktop apps use the microphone.")
                 : L.T($"Не удалось открыть микрофон: {ex.Message}", $"Could not open the microphone: {ex.Message}");
             _tray?.ShowBalloonTip(8000, L.T("Микрофон недоступен", "Microphone unavailable"), why, Forms.ToolTipIcon.Warning);
+            _lockPending = false;
             return;
         }
         // A tap shorter than the device open: the release has already ended this take, and nothing
         // would hide the pill again.
-        if (!_recorder.IsRecording) return;
+        if (!_recorder.IsRecording) { _lockPending = false; return; }
         if (_tray != null) _tray.Icon = _iconBusy;
         if (_settings.ShowOverlay)
         {
             _overlay ??= new OverlayWindow(_settings, _settings.Save);
             _overlay.ShowListening(_recorder);
+        }
+        if (_lockPending) { _lockPending = false; Lock(); }
+    }
+
+    private void OnHotkeyReleased()
+    {
+        if (_swallowRelease) { _swallowRelease = false; return; }
+        long now = Environment.TickCount64;
+        _lastTapUpTick = now - _pressTick < TapMaxMs ? now : 0;
+        if (_locked || _lockPending) return;
+        _ = HandleReleaseAsync();
+    }
+
+    private void Lock()
+    {
+        _locked = true;
+        if (_hook != null) _hook.CaptureEscape = true;
+        Log.Write("hands-free recording");
+        if (_settings.ShowOverlay)
+        {
+            _overlay?.SetLocked(DateTime.UtcNow);
+            if (_settings.HandsFreeHints < 3)
+            {
+                _settings.HandsFreeHints++;
+                _settings.Save();
+                string key = Settings.HotkeyTitle(_settings.HotkeyVk);
+                _overlay?.ShowCaption(L.T($"Запись идёт сама. Остановить: {key}, отменить: Esc",
+                                          $"Recording on its own. Stop: {key}, cancel: Esc"), 3000);
+            }
+        }
+    }
+
+    private void EndLock()
+    {
+        _locked = false;
+        _lockPending = false;
+        if (_hook != null) _hook.CaptureEscape = false;
+        _overlay?.SetLocked(null);
+    }
+
+    /// <summary>Esc during a hands-free recording: the take is dropped, nothing is pasted.</summary>
+    private async Task CancelHandsFreeAsync()
+    {
+        if (!_locked) return;
+        EndLock();
+        if (!_recorder.IsRecording || _busy) return;
+        _busy = true;
+        try { await _recorder.StopAsync(); }
+        catch (Exception ex) { Log.Write($"cancel: {ex.Message}"); }
+        finally
+        {
+            _busy = false;
+            _overlay?.HideNow();
+            if (_tray != null) _tray.Icon = _iconIdle;
+            Log.Write("hands-free recording canceled");
         }
     }
 
@@ -587,6 +670,15 @@ public partial class PisarApp : Application
                     return;
                 }
                 text = await Task.Run(() => model.Transcribe(samples, Recorder.SampleRate));
+                if (Brain.CancelledBody(text) is { } kept)
+                {
+                    // Said "Писарь, отмена": paste nothing, but keep the words for "Copy last dictation".
+                    Log.Write("take canceled by voice");
+                    if (kept.Length > 0) _lastText = kept;
+                    _selectionAtPress = null;
+                    Hint(L.T("Отменено, ничего не вставил", "Canceled, nothing pasted"));
+                    return;
+                }
                 string? selected = _selectionAtPress != null && text.Length > 0 ? await _selectionAtPress : null;
                 _selectionAtPress = null;
                 if (selected != null)
@@ -640,6 +732,7 @@ public partial class PisarApp : Application
                 overlay?.HideNow();
                 var mode = _settings.InsertMode;
                 TextInserter.KeepOnClipboard = _settings.KeepOnClipboard;
+                _lastText = text.TrimEnd();
                 var result = await Task.Run(() => TextInserter.Insert(text, mode, _lifetime.Token));
                 if (result == InsertResult.Blocked)
                     Hint(L.T("Это окно запущено от администратора, вставить туда нельзя. Текст лежит в буфере обмена.",
@@ -825,6 +918,14 @@ public partial class PisarApp : Application
         menu.Items.Add(hint);
         menu.Items.Add(new Forms.ToolStripSeparator());
         menu.Items.Add(L.T("Настройки…", "Settings…"), null, (_, _) => ShowSettings());
+        var copyLast = new Forms.ToolStripMenuItem(L.T("Скопировать последнюю диктовку", "Copy last dictation"));
+        copyLast.Click += (_, _) =>
+        {
+            if (string.IsNullOrEmpty(_lastText)) return;
+            try { System.Windows.Clipboard.SetText(_lastText); }
+            catch (Exception ex) { Log.Write($"copy last: {ex.Message}"); }
+        };
+        menu.Items.Add(copyLast);
         // Always visible, so it is clear whether text leaves the computer.
         var brain = new Forms.ToolStripMenuItem("");
         var brainOff = new Forms.ToolStripMenuItem(L.T("Выключен", "Off"));
@@ -862,6 +963,7 @@ public partial class PisarApp : Application
         menu.Opening += (_, _) =>
         {
             autostart.Checked = Autostart.IsEnabled();
+            copyLast.Enabled = !string.IsNullOrEmpty(_lastText);
             string host = SpeechCleanup.HostOf(_settings.CleanupEndpointUrl);
             brain.Text = _settings.Brain switch
             {

@@ -61,6 +61,22 @@ public static partial class Brain
     private static partial Regex LeadingAddressRegex();
 
     /// <summary>"Писарь, сделай короче" -> "сделай короче": the address before a command on a selection is optional.</summary>
+    [GeneratedRegex(@"(?:гига[\s,—-]+)?п[еиэ]сар[ьяюе]?\b[\s,.:!—-]*(?:отмена|отмени|отменить|отбой)[\s.!]*$", RegexOptions.IgnoreCase)]
+    private static partial Regex CancelRegex();
+
+    /// <summary>
+    /// "Писарь, отмена" at the very end: the take is dropped, nothing is pasted. Works without the Brain.
+    /// Returns what was said before the phrase (possibly empty), or null when there is no such ending.
+    /// </summary>
+    public static string? CancelledBody(string text)
+    {
+        var m = CancelRegex().Match(text);
+        if (!m.Success) return null;
+        var body = text[..m.Index].TrimEnd();
+        while (body.Length > 0 && ",—–-".Contains(body[^1])) body = body[..^1].TrimEnd();
+        return body;
+    }
+
     public static string StripAddress(string text) => LeadingAddressRegex().Replace(text, "").Trim().TrimEnd('.', '!');
 
     /// <summary>What the pill says while the model works.</summary>
