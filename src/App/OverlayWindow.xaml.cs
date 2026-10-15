@@ -51,14 +51,9 @@ public partial class OverlayWindow : Window
         Elapsed.Text = $"{(int)t.TotalMinutes}:{t.Seconds:00}";
     }
 
-    // The website's wave palette, light to teal, one gradient per bar.
-    private static readonly (string top, string bottom)[] Palette =
-    {
-        ("#a8e063", "#1fa03a"), ("#a8e063", "#1fa03a"), ("#9adf55", "#17963f"), ("#8ad84c", "#10884a"),
-        ("#7fd648", "#0e9367"), ("#63cf62", "#009b82"), ("#4fc884", "#00a08c"), ("#3fc39b", "#00a08c"),
-        ("#38bfa5", "#008f92"), ("#35bcb0", "#008699"), ("#35bcb0", "#008699"), ("#35bcb0", "#008699"),
-        ("#35bcb0", "#008699"),
-    };
+    // As on macOS: dark bars while listening, blue while the model works.
+    private static readonly SolidColorBrush BarBrush = new(Color.FromArgb(0xC7, 0x00, 0x00, 0x00));
+    private static readonly SolidColorBrush BusyBrush = new(Color.FromArgb(0xFF, 0x0A, 0x84, 0xFF));
 
     private readonly Rectangle[] _bars = new Rectangle[BarCount];
     private readonly float[] _heights = new float[BarCount];
@@ -87,13 +82,10 @@ public partial class OverlayWindow : Window
         Pill.MouseLeftButtonUp += OnDragEnd;
         for (int i = 0; i < BarCount; i++)
         {
-            var (top, bottom) = Palette[i % Palette.Length];
-            var brush = new LinearGradientBrush((Color)ColorConverter.ConvertFromString(top),
-                                                (Color)ColorConverter.ConvertFromString(bottom), 90);
             var r = new Rectangle
             {
                 Width = BarWidth, Height = BarWidth, RadiusX = BarWidth / 2, RadiusY = BarWidth / 2,
-                Margin = new Thickness(i == 0 ? 0 : BarGap, 0, 0, 0), Fill = brush,
+                Margin = new Thickness(i == 0 ? 0 : BarGap, 0, 0, 0), Fill = BarBrush,
                 VerticalAlignment = VerticalAlignment.Center,
             };
             _bars[i] = r;
@@ -119,6 +111,7 @@ public partial class OverlayWindow : Window
         Label.Visibility = Visibility.Collapsed;
         Caption.Visibility = Visibility.Collapsed;
         Bars.Visibility = Visibility.Visible;
+        foreach (var b in _bars) b.Fill = BarBrush;
         _lockedSince = null;
         LockIcon.Visibility = Visibility.Collapsed;
         Elapsed.Visibility = Visibility.Collapsed;
@@ -137,6 +130,7 @@ public partial class OverlayWindow : Window
         _recorder = null;
         _demo = false;
         _busyRipple = true;
+        foreach (var b in _bars) b.Fill = BusyBrush;
         _ripplePhase = 0;
         if (!_timer.IsEnabled) _timer.Start();
     }
@@ -172,14 +166,31 @@ public partial class OverlayWindow : Window
         int mine = ++_captionSerial;
         Caption.Foreground = Label.Foreground;
         Caption.Text = text;
-        Caption.Visibility = Visibility.Visible;
+        Caption.BeginAnimation(MaxWidthProperty, null);   // drop the last slide, or it would still hold 0
+        Caption.BeginAnimation(OpacityProperty, null);
+        Caption.MaxWidth = double.PositiveInfinity;
+        Caption.Opacity = 0;
+        Caption.Visibility = Visibility.Visible;            // a collapsed element measures as zero
         Caption.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Resize(Math.Ceiling(Caption.DesiredSize.Width) + 10 + ListeningWidth);
+        double w = Math.Ceiling(Caption.DesiredSize.Width);
+        // The caption slides open while the pill grows from its middle, and fades in: no jump.
+        Animate(Caption, MaxWidthProperty, 0, w);
+        Animate(Caption, OpacityProperty, 0, 1);
+        Resize(w + ListeningWidth);
         await Task.Delay(ms);
         if (mine != _captionSerial || Caption.Visibility != Visibility.Visible || Bars.Visibility != Visibility.Visible) return;
-        Caption.Visibility = Visibility.Collapsed;
+        Animate(Caption, MaxWidthProperty, w, 0);
+        Animate(Caption, OpacityProperty, 1, 0);
         Resize(ListeningWidth);
+        await Task.Delay(SizeMs + 20);
+        if (mine == _captionSerial) Caption.Visibility = Visibility.Collapsed;
     }
+
+    private const int SizeMs = 180;
+
+    private static void Animate(UIElement e, DependencyProperty p, double from, double to) =>
+        e.BeginAnimation(p, new DoubleAnimation(from, to, TimeSpan.FromMilliseconds(SizeMs))
+        { EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut } });
 
     private int _captionSerial;
 
@@ -256,12 +267,39 @@ public partial class OverlayWindow : Window
     }
 
     /// <summary>Pill and window sized around the content with equal side padding.</summary>
+    private DispatcherTimer? _sizeTimer;
+
+    /// <summary>
+    /// New pill width. While shown, it changes over a few frames and grows or shrinks from its
+    /// middle, as on macOS; a sudden jump of the window looked like a twitch.
+    /// </summary>
     private void Resize(double contentWidth)
     {
-        Pill.Width = contentWidth + 2 * PillPadding;
+        double target = contentWidth + 2 * PillPadding;
+        _sizeTimer?.Stop();
+        double from = Pill.Width;
+        if (!IsVisible || double.IsNaN(from) || Math.Abs(from - target) < 0.5) { SetPillWidth(target); return; }
+        var started = DateTime.UtcNow;
+        var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(15) };
+        timer.Tick += (_, _) =>
+        {
+            double x = Math.Min(1, (DateTime.UtcNow - started).TotalMilliseconds / SizeMs);
+            double eased = 1 - Math.Pow(1 - x, 3);
+            SetPillWidth(from + (target - from) * eased);
+            if (x >= 1) timer.Stop();
+        };
+        _sizeTimer = timer;
+        timer.Start();
+    }
+
+    private void SetPillWidth(double pillWidth)
+    {
+        double old = Width;
+        Pill.Width = pillWidth;
         Pill.Height = PillHeight;
-        Width = Pill.Width + 2 * WindowMargin;
+        Width = pillWidth + 2 * WindowMargin;
         Height = PillHeight + 2 * WindowMargin;
+        if (IsVisible && !double.IsNaN(old)) Left -= (Width - old) / 2;   // keep the middle in place
     }
 
     private void Appear()
@@ -305,28 +343,15 @@ public partial class OverlayWindow : Window
         }
     }
 
-    /// <summary>Light or dark pill, following "Choose your default app mode" in Windows settings.</summary>
+    /// <summary>
+    /// Always the light pill, as on macOS: white with a thin border reads on both light and dark
+    /// windows, and the blue hands-free lock stays visible (on the dark pill it was lost).
+    /// </summary>
     private void ApplyTheme()
     {
-        bool light = true;
-        try
-        {
-            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            light = key?.GetValue("AppsUseLightTheme") is not int v || v != 0;
-        }
-        catch { }
-        if (light)
-        {
-            Pill.Background = new SolidColorBrush(Color.FromArgb(0xF5, 0xFF, 0xFF, 0xFF));
-            Pill.BorderBrush = new SolidColorBrush(Color.FromArgb(0x1F, 0x00, 0x00, 0x00));
-            Label.Foreground = new SolidColorBrush(Color.FromArgb(0xD9, 0x00, 0x00, 0x00));
-        }
-        else
-        {
-            Pill.Background = new SolidColorBrush(Color.FromArgb(0xF2, 0x2C, 0x2C, 0x2C));
-            Pill.BorderBrush = new SolidColorBrush(Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF));
-            Label.Foreground = new SolidColorBrush(Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF));
-        }
+        Pill.Background = new SolidColorBrush(Color.FromArgb(0xF5, 0xFF, 0xFF, 0xFF));
+        Pill.BorderBrush = new SolidColorBrush(Color.FromArgb(0x1F, 0x00, 0x00, 0x00));
+        Label.Foreground = new SolidColorBrush(Color.FromArgb(0xD9, 0x00, 0x00, 0x00));
     }
 
     /// <summary>Positions the pill just below the caret, or at the bottom center of the active window's monitor.</summary>

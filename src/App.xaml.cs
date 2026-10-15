@@ -325,6 +325,16 @@ public partial class PisarApp : Application
     }
 
     /// <summary>Design aid: shows the overlay with synthetic levels for a few seconds, then the "recognizing" state.</summary>
+    private static void SaveShot(Window w, string path)
+    {
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+        Native.GetWindowRect(hwnd, out var r);
+        using var bmp = new System.Drawing.Bitmap(r.Right - r.Left, r.Bottom - r.Top);
+        using (var g = System.Drawing.Graphics.FromImage(bmp))
+            g.CopyFromScreen(r.Left, r.Top, 0, 0, bmp.Size);
+        bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+    }
+
     private static int OverlayDemo(string? lockedShot)
     {
         var app = new PisarApp();
@@ -335,19 +345,15 @@ public partial class PisarApp : Application
             var overlay = new OverlayWindow(new Settings(), () => { });
             overlay.ShowListening(null, demo: true);
             await Task.Delay(3000);
-            // Hands-free: lock and time; with a path, the pill is saved as a picture.
+            // Hands-free: lock, time and the first-time caption; with a path, the pill is saved as pictures.
             overlay.SetLocked(DateTime.UtcNow.AddSeconds(-42));
+            overlay.ShowCaption(L.T("Запись идёт сама. Остановить: правый Ctrl, отменить: Esc",
+                                    "Recording on its own. Stop: right Ctrl, cancel: Esc"), 2500);
+            await Task.Delay(1200);
+            if (lockedShot != null) SaveShot(overlay, lockedShot.Replace(".png", "-caption.png"));
+            await Task.Delay(2500);
+            if (lockedShot != null) SaveShot(overlay, lockedShot);
             await Task.Delay(1500);
-            if (lockedShot != null)
-            {
-                var hwnd = new System.Windows.Interop.WindowInteropHelper(overlay).Handle;
-                Native.GetWindowRect(hwnd, out var r);
-                using var bmp = new System.Drawing.Bitmap(r.Right - r.Left, r.Bottom - r.Top);
-                using (var g = System.Drawing.Graphics.FromImage(bmp))
-                    g.CopyFromScreen(r.Left, r.Top, 0, 0, bmp.Size);
-                bmp.Save(lockedShot, System.Drawing.Imaging.ImageFormat.Png);
-            }
-            await Task.Delay(3000);
             overlay.SetLocked(null);
             overlay.ShowRecognizing();
             await Task.Delay(3000);

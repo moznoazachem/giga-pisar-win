@@ -16,10 +16,13 @@
         </Border.Effect>
         <Grid>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                <TextBlock x:Name="Caption" Visibility="Collapsed" Margin="0,0,10,0" VerticalAlignment="Center"
-                           FontSize="12.5" FontFamily="Segoe UI Variable Text, Segoe UI"/>
-                <TextBlock x:Name="LockIcon" Visibility="Collapsed" Margin="0,0,8,0" VerticalAlignment="Center"
-                           Text="&#xE72E;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Foreground="#FF0A84FF"/>
+                <TextBlock x:Name="Caption" Visibility="Collapsed" Padding="0,0,10,0" VerticalAlignment="Center"
+                           FontSize="12.5" FontFamily="Segoe UI Variable Text, Segoe UI" TextWrapping="NoWrap"/>
+                <!-- A solid lock, as SF Symbols lock.fill on macOS: shackle and body. -->
+                <Canvas x:Name="LockIcon" Visibility="Collapsed" Width="10" Height="13" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <Path Data="M2.6,6 V4 A2.4,2.4 0 0 1 7.4,4 V6" Stroke="#FF0A84FF" StrokeThickness="1.7"/>
+                    <Rectangle Canvas.Top="5.5" Width="10" Height="7.5" RadiusX="1.6" RadiusY="1.6" Fill="#FF0A84FF"/>
+                </Canvas>
                 <StackPanel x:Name="Bars" Orientation="Horizontal" Height="22" VerticalAlignment="Center"/>
                 <TextBlock x:Name="Elapsed" Visibility="Collapsed" Margin="8,0,0,0" VerticalAlignment="Center"
                            FontSize="12" FontFamily="Segoe UI Variable Text, Segoe UI" Opacity="0.6"/>
