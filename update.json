@@ -1,8 +1,8 @@
 {
-  "version": "1.0.15",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.15/GigaPisar-Setup.exe",
-  "sha256": "53d3345c3d209893c871b144c1b30212efb5b788eef6516237cb3f78af37f8b5",
-  "size": 55207476,
-  "notes": "Gemini снова работает: новые модели по умолчанию, новые ключи на «AQ.» узнаются сами. Если сервис не принял ключ, Писарь показывает причину от самого сервера.",
-  "notes_en": "Gemini works again: current models by default, new keys starting with AQ. are recognized. When a service rejects the key, Pisar shows the service's own reason."
+  "version": "1.0.16",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.16/GigaPisar-Setup.exe",
+  "sha256": "623455759269ef5588cff14fc5b982546114bc119bd7c566089e9dd3a076b9a4",
+  "size": 55243076,
+  "notes": "Запись без удержания: дважды быстро нажмите клавишу диктовки, и запись пойдёт сама, на плашке замочек и время. Остановить: нажать клавишу ещё раз, отменить: Esc. Скажите в конце «Писарь, отмена», и ничего не вставится. В меню у часов появился пункт «Скопировать последнюю диктовку». Плашка теперь всегда светлая, как на маке, и плавно меняет размер.",
+  "notes_en": "Hands-free recording: quickly double-press the dictation key and recording keeps going, the panel shows a lock and the time. Press the key again to stop, Esc to cancel. Say “Писарь, отмена” at the end and nothing is pasted. The tray menu has a new Copy last dictation item. The panel is now always light, as on macOS, and resizes smoothly."
 }
