@@ -80,7 +80,7 @@ public partial class PisarApp : Application
         if (args.Length >= 3 && args[0] == "--transcribe")
             return CliTranscribe(args[1], args[2]);
         if (args.Length >= 1 && args[0] == "--overlay-demo")
-            return OverlayDemo();
+            return OverlayDemo(args.Length >= 2 ? args[1] : null);
         if (args.Length >= 2 && args[0] == "--mic-probe")
             return MicProbe(args[1]);
         if (args.Length >= 2 && args[0] == "--mic-test")
@@ -325,7 +325,7 @@ public partial class PisarApp : Application
     }
 
     /// <summary>Design aid: shows the overlay with synthetic levels for a few seconds, then the "recognizing" state.</summary>
-    private static int OverlayDemo()
+    private static int OverlayDemo(string? lockedShot)
     {
         var app = new PisarApp();
         app.InitializeComponent();
@@ -334,7 +334,21 @@ public partial class PisarApp : Application
             L.Apply(UiLanguage.Russian);
             var overlay = new OverlayWindow(new Settings(), () => { });
             overlay.ShowListening(null, demo: true);
-            await Task.Delay(6000);
+            await Task.Delay(3000);
+            // Hands-free: lock and time; with a path, the pill is saved as a picture.
+            overlay.SetLocked(DateTime.UtcNow.AddSeconds(-42));
+            await Task.Delay(1500);
+            if (lockedShot != null)
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(overlay).Handle;
+                Native.GetWindowRect(hwnd, out var r);
+                using var bmp = new System.Drawing.Bitmap(r.Right - r.Left, r.Bottom - r.Top);
+                using (var g = System.Drawing.Graphics.FromImage(bmp))
+                    g.CopyFromScreen(r.Left, r.Top, 0, 0, bmp.Size);
+                bmp.Save(lockedShot, System.Drawing.Imaging.ImageFormat.Png);
+            }
+            await Task.Delay(3000);
+            overlay.SetLocked(null);
             overlay.ShowRecognizing();
             await Task.Delay(3000);
             overlay.ShowHint(L.T("Тишина на входе. Проверьте микрофон", "Silence on input. Check the microphone"));
@@ -578,7 +592,8 @@ public partial class PisarApp : Application
             {
                 _settings.HandsFreeHints++;
                 _settings.Save();
-                string key = Settings.HotkeyTitle(_settings.HotkeyVk);
+                string title = Settings.HotkeyTitle(_settings.HotkeyVk);
+                string key = char.ToLower(title[0]) + title[1..];
                 _overlay?.ShowCaption(L.T($"Запись идёт сама. Остановить: {key}, отменить: Esc",
                                           $"Recording on its own. Stop: {key}, cancel: Esc"), 3000);
             }

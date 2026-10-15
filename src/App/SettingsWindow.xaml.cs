@@ -98,7 +98,8 @@ public partial class SettingsWindow : Window
         SimpleSyntaxBox.ToolTip = L.T("Как реплика в переписке: «ок, буду в пять». Вопрос и восклицательный знак остаются.",
                                       "Like a chat reply: \"ok, see you at five\". Question and exclamation marks stay.");
         SimpleSyntaxBox.IsChecked = _settings.SimpleSyntax;
-        string key = Settings.HotkeyTitle(_settings.HotkeyVk);
+        string title = Settings.HotkeyTitle(_settings.HotkeyVk);
+        string key = char.ToLower(title[0]) + title[1..];   // inside a sentence: "правый Ctrl"
         HandsFreeBox.Content = L.T("Запись без удержания", "Hands-free recording");
         HandsFreeHint.Text = L.T($"Дважды быстро нажмите {key}, и запись пойдёт сама, держать клавишу не нужно. Удобно для длинного текста. Остановить: нажать {key} ещё раз, отменить: Esc. Пока запись идёт сама, на плашке видны замочек и время. Через 5 минут запись остановится сама.",
                                  $"Quickly double-press {key} and the recording keeps going on its own, no need to hold the key. Handy for long text. Press {key} again to stop, Esc to cancel. While it runs on its own, the panel shows a lock and the time. It stops by itself after 5 minutes.");
