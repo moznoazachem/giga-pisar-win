@@ -6,7 +6,10 @@
         FontFamily="Segoe UI Variable, Segoe UI" FontSize="13">
     <StackPanel Margin="24,20,24,20">
         <TextBlock x:Name="Heading" FontSize="18" FontWeight="SemiBold"/>
-        <TextBlock x:Name="Notes" Margin="0,8,0,0" TextWrapping="Wrap" Opacity="0.85"/>
+        <!-- a long list scrolls inside, the buttons stay in place -->
+        <ScrollViewer Margin="0,8,0,0" MaxHeight="200" VerticalScrollBarVisibility="Auto">
+            <TextBlock x:Name="Notes" TextWrapping="Wrap" Opacity="0.85"/>
+        </ScrollViewer>
         <ProgressBar x:Name="Bar" Margin="0,18,0,0" Height="6" Minimum="0" Maximum="100" Visibility="Collapsed"/>
         <TextBlock x:Name="Status" Margin="0,8,0,0" Opacity="0.8" Visibility="Collapsed"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
