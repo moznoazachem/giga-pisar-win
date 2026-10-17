@@ -1,8 +1,8 @@
 {
-  "version": "1.0.16",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.16/GigaPisar-Setup.exe",
-  "sha256": "623455759269ef5588cff14fc5b982546114bc119bd7c566089e9dd3a076b9a4",
-  "size": 55243076,
-  "notes": "Запись без удержания: дважды быстро нажмите клавишу диктовки, и запись пойдёт сама, на плашке замочек и время. Остановить: нажать клавишу ещё раз, отменить: Esc. Скажите в конце «Писарь, отмена», и ничего не вставится. В меню у часов появился пункт «Скопировать последнюю диктовку». Плашка теперь всегда светлая, как на маке, и плавно меняет размер.",
-  "notes_en": "Hands-free recording: quickly double-press the dictation key and recording keeps going, the panel shows a lock and the time. Press the key again to stop, Esc to cancel. Say “Писарь, отмена” at the end and nothing is pasted. The tray menu has a new Copy last dictation item. The panel is now always light, as on macOS, and resizes smoothly."
+  "version": "1.0.17",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.17/GigaPisar-Setup.exe",
+  "sha256": "2144d55127a84e19d7359ebe2cda950307ef1d4f9b54ab092159020c59b634c9",
+  "size": 55244071,
+  "notes": "Длинный список «что нового» в окне обновления теперь прокручивается, кнопки всегда на месте. Диктовку можно включать кнопкой мыши (Logitech Options+ и похожие программы) и макросами AutoHotkey: Писарь больше не пропускает программные нажатия клавиши диктовки.",
+  "notes_en": "A long what's-new list in the update window now scrolls, and the buttons stay in place. Dictation can be started by a mouse button (Logitech Options+ and similar apps) and by AutoHotkey macros: Pisar no longer ignores synthesized presses of the dictation key."
 }
