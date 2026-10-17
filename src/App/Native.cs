@@ -13,6 +13,9 @@ internal static class Native
     public const int WM_SYSKEYUP = 0x0105;
     public const uint LLKHF_INJECTED = 0x10;
     public const uint LLKHF_EXTENDED = 0x01;
+    // Tag on every key Pisar sends itself, so the hook skips exactly those and still
+    // hears keys injected by mouse software and macro tools.
+    public static readonly UIntPtr PisarInputTag = (UIntPtr)0x50495341;
 
     public const int GWL_EXSTYLE = -20;
     public const int WS_EX_NOACTIVATE = 0x08000000;

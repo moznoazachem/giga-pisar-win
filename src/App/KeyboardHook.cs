@@ -68,8 +68,8 @@ public sealed class KeyboardHook : IDisposable
         if (nCode >= 0)
         {
             var info = Marshal.PtrToStructure<Native.KBDLLHOOKSTRUCT>(lParam);
-            bool injected = (info.flags & Native.LLKHF_INJECTED) != 0;
-            if (!injected)
+            bool ours = (info.flags & Native.LLKHF_INJECTED) != 0 && info.dwExtraInfo == Native.PisarInputTag;
+            if (!ours)
             {
                 int msg = (int)wParam;
                 bool keyDown = msg == Native.WM_KEYDOWN || msg == Native.WM_SYSKEYDOWN;

@@ -289,6 +289,7 @@ public static class TextInserter
                 wVk = vk,
                 wScan = scan == 0 && vk != 0 && (flags & Native.KEYEVENTF_UNICODE) == 0 ? (ushort)Native.MapVirtualKey(vk, 0) : scan,
                 dwFlags = flags,
+                dwExtraInfo = Native.PisarInputTag,
             },
         },
     };
