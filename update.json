@@ -1,8 +1,8 @@
 {
-  "version": "1.0.17",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.17/GigaPisar-Setup.exe",
-  "sha256": "2144d55127a84e19d7359ebe2cda950307ef1d4f9b54ab092159020c59b634c9",
-  "size": 55244071,
-  "notes": "Длинный список «что нового» в окне обновления теперь прокручивается, кнопки всегда на месте. Диктовку можно включать кнопкой мыши (Logitech Options+ и похожие программы) и макросами AutoHotkey: Писарь больше не пропускает программные нажатия клавиши диктовки.",
-  "notes_en": "A long what's-new list in the update window now scrolls, and the buttons stay in place. Dictation can be started by a mouse button (Logitech Options+ and similar apps) and by AutoHotkey macros: Pisar no longer ignores synthesized presses of the dictation key."
+  "version": "1.0.18",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.18/GigaPisar-Setup.exe",
+  "sha256": "958d8c7d417da37bee7377a45a7051d6866b81802a088db1027c91e2e03c7aa5",
+  "size": 55244414,
+  "notes": "Писарь больше не отправляет никаких данных в Microsoft: служебная статистика движка распознавания выключена.",
+  "notes_en": "Pisar no longer sends any data to Microsoft: the speech engine telemetry is switched off."
 }
