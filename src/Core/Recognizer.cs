@@ -36,6 +36,8 @@ public sealed class Recognizer : IDisposable
         ModelDir = modelDir;
         _cfg = ModelConfig.Load(Path.Combine(modelDir, ModelName + ".yaml"));
         _features = new Features(_cfg.Features);
+        // onnxruntime reports usage events to Microsoft through Windows diagnostics; the app sends nothing anywhere.
+        OrtEnv.Instance().DisableTelemetryEvents();
 
         using var options = new SessionOptions
         {
