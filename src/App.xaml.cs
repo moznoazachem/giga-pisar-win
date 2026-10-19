@@ -487,7 +487,7 @@ public partial class PisarApp : Application
 
     private async Task CheckForUpdatesAsync(bool silent)
     {
-        if (_updateWindow != null) { _updateWindow.Activate(); return; }
+        if (_updateWindow != null) { if (!silent) _updateWindow.BringBack(); return; }
         UpdateInfo? info;
         try { info = await Updater.CheckAsync(_lifetime.Token); }
         catch (OperationCanceledException) { return; }

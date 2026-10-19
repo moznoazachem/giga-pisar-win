@@ -25,6 +25,7 @@ public partial class UpdateWindow : Window
             : notes;
         LaterButton.Content = L.T("Позже", "Later");
         UpdateButton.Content = L.T("Обновить", "Update");
+        HideButton.Content = L.T("Скрыть", "Hide");
         Closed += (_, _) => _cts?.Cancel();
     }
 
@@ -32,6 +33,7 @@ public partial class UpdateWindow : Window
     {
         UpdateButton.IsEnabled = false;
         LaterButton.Content = L.T("Отмена", "Cancel");
+        HideButton.Visibility = Visibility.Visible;
         Bar.Visibility = Visibility.Visible;
         Status.Visibility = Visibility.Visible;
         Bar.IsIndeterminate = true;
@@ -61,12 +63,24 @@ public partial class UpdateWindow : Window
         catch (Exception ex)
         {
             Log.Write($"update failed: {ex}");
+            HideButton.Visibility = Visibility.Collapsed;
+            BringBack();
             Bar.IsIndeterminate = false;
             Status.Text = L.T("Не получилось скачать обновление. Попробуйте позже или скачайте с сайта.",
                               "Could not download the update. Try later or download it from the website.");
             UpdateButton.IsEnabled = true;
             LaterButton.Content = L.T("Позже", "Later");
         }
+    }
+
+    // On a slow connection the download can take an hour: let it go on out of sight.
+    private void Hide_Click(object sender, RoutedEventArgs e) => Hide();
+
+    public void BringBack()
+    {
+        Show();
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Activate();
     }
 
     private void Later_Click(object sender, RoutedEventArgs e)
