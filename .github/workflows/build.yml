@@ -26,6 +26,45 @@ jobs:
       - name: Publish the app
         run: dotnet publish src/GigaPisar.csproj -c Release -r win-x64 --self-contained true -o dist/app -nologo
 
+      # The launcher must not carry the CET mark (see CETCompat in the csproj): with it the app
+      # does not start on Windows 10 with a recent processor, and nothing in the logs says why.
+      - name: Check the launcher
+        shell: pwsh
+        run: |
+          $b = [IO.File]::ReadAllBytes("dist/app/GigaPisar.exe")
+          $pe = [BitConverter]::ToInt32($b, 0x3C)
+          $sections = [BitConverter]::ToUInt16($b, $pe + 6)
+          $opt = $pe + 24
+          $table = $opt + [BitConverter]::ToUInt16($b, $pe + 20)
+          $debugRva = [BitConverter]::ToUInt32($b, $opt + 112 + 6 * 8)
+          $debugSize = [BitConverter]::ToUInt32($b, $opt + 112 + 6 * 8 + 4)
+          $debugAt = -1
+          for ($i = 0; $i -lt $sections; $i++) {
+            $s = $table + $i * 40
+            $va = [BitConverter]::ToUInt32($b, $s + 12)
+            $raw = [BitConverter]::ToUInt32($b, $s + 16)
+            if ($debugRva -ge $va -and $debugRva -lt $va + $raw) {
+              $debugAt = $debugRva - $va + [BitConverter]::ToUInt32($b, $s + 20)
+            }
+          }
+          $cet = $false
+          if ($debugAt -ge 0) {
+            for ($e = $debugAt; $e -lt $debugAt + $debugSize; $e += 28) {
+              # IMAGE_DEBUG_TYPE_EX_DLLCHARACTERISTICS = 20, IMAGE_DLLCHARACTERISTICS_EX_CET_COMPAT = 1
+              if ([BitConverter]::ToUInt32($b, $e + 12) -eq 20) {
+                $flags = [BitConverter]::ToUInt32($b, [BitConverter]::ToUInt32($b, $e + 24))
+                if ($flags -band 1) { $cet = $true }
+              }
+            }
+          }
+          "CET mark on the launcher: $cet"
+          if ($cet) { throw "GigaPisar.exe is marked CET-compatible" }
+          # And the runtime does start: a diagnostic mode that only writes a file and exits.
+          $p = Start-Process dist/app/GigaPisar.exe -ArgumentList '--selection-test', "$env:RUNNER_TEMP\selection.txt" -PassThru
+          if (-not $p.WaitForExit(60000)) { $p.Kill(); throw "GigaPisar.exe did not exit" }
+          "exit code: $($p.ExitCode)"
+          if ($p.ExitCode -eq -2146233082) { throw "the .NET runtime failed to start (0x80131506)" }
+
       # onnxruntime.dll needs the Visual C++ runtime, which a clean Windows 10 lacks.
       # Microsoft allows shipping these files next to an application.
       - name: Bundle the Visual C++ runtime

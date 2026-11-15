@@ -22,6 +22,10 @@
     <NoWarn>$(NoWarn);WPF0001</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SelfContained>true</SelfContained>
+    <!-- .NET 9+ marks the launcher as CET-compatible, and the runtime then needs QueueUserAPC2,
+         which Windows 10 lacks: on Intel 11th gen / AMD Zen 3 and newer the app died at startup
+         with 0x80131506 before Main (#15). Without the mark the runtime starts as .NET 8 did. -->
+    <CETCompat>false</CETCompat>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <DebugType>embedded</DebugType>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
