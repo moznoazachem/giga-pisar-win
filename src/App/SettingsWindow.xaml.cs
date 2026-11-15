@@ -98,6 +98,10 @@ public partial class SettingsWindow : Window
         SimpleSyntaxBox.ToolTip = L.T("Как реплика в переписке: «ок, буду в пять». Вопрос и восклицательный знак остаются.",
                                       "Like a chat reply: \"ok, see you at five\". Question and exclamation marks stay.");
         SimpleSyntaxBox.IsChecked = _settings.SimpleSyntax;
+        HesitationsBox.Content = L.T("Убирать «э-э» и «м-м»", "Remove \"uh\" and \"um\"");
+        HesitationsBox.ToolTip = L.T("Вырезает из диктовки звуки-запинки: «э-э», «а-а», «м-м». Работает на самом компьютере, без интернета.",
+                                     "Cuts hesitation sounds like «э-э», «а-а», «м-м» out of the take. Works on this computer, offline.");
+        HesitationsBox.IsChecked = _settings.DropHesitations;
         string title = Settings.HotkeyTitle(_settings.HotkeyVk);
         string key = char.ToLower(title[0]) + title[1..];   // inside a sentence: "правый Ctrl"
         HandsFreeBox.Content = L.T("Запись без удержания", "Hands-free recording");
@@ -153,6 +157,10 @@ public partial class SettingsWindow : Window
         EveryTakeBox.IsChecked = _settings.BrainEveryTake;
         EveryTakeHint.Text = L.T("Нейросеть причёсывает каждую диктовку сама, без команды «Писарь, …». Удобно с быстрым облачным сервисом.",
                                  "The model tidies every take by itself, no \"Pisar, …\" needed. Handy with a fast cloud service.");
+        SkipShortBox.Content = L.T("Короткие без правки", "Short takes as dictated");
+        SkipShortBox.IsChecked = _settings.BrainSkipShort;
+        SkipShortHint.Text = L.T($"Диктовка короче {Brain.SkipShortWords} слов вставляется сразу и никуда не отправляется. Команды после слова «Писарь» выполняются всегда.",
+                                 $"A take shorter than {Brain.SkipShortWords} words goes in at once and is sent nowhere. Commands after \"Pisar\" always run.");
         PromptExpander.Header = L.T("Инструкция для этого режима", "Instructions for this mode");
         PromptBox.Text = _settings.EffectiveCleanupPrompt;
         UpdateBrainTexts();
@@ -241,6 +249,12 @@ public partial class SettingsWindow : Window
         _apply();
     }
 
+    private void Hesitations_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.DropHesitations = HesitationsBox.IsChecked == true;
+        _apply();
+    }
+
     private void SimpleSyntax_Click(object sender, RoutedEventArgs e)
     {
         _settings.SimpleSyntax = SimpleSyntaxBox.IsChecked == true;
@@ -284,6 +298,8 @@ public partial class SettingsWindow : Window
         EveryTakeBox.Visibility = every;
         EveryTakeHint.Visibility = every;
         PromptExpander.Visibility = b != BrainSource.Off && _settings.BrainEveryTake ? Visibility.Visible : Visibility.Collapsed;
+        SkipShortBox.Visibility = PromptExpander.Visibility;
+        SkipShortHint.Visibility = PromptExpander.Visibility;
     }
 
     private async void Brain_Changed(object sender, SelectionChangedEventArgs e)
@@ -309,6 +325,12 @@ public partial class SettingsWindow : Window
     private void Selection_Click(object sender, RoutedEventArgs e)
     {
         _settings.BrainOnSelection = SelectionBox.IsChecked == true;
+        _apply();
+    }
+
+    private void SkipShort_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.BrainSkipShort = SkipShortBox.IsChecked == true;
         _apply();
     }
 

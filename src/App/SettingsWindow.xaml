@@ -81,6 +81,7 @@
                     <CheckBox x:Name="HandsFreeBox" Margin="0,10,0,0" Click="HandsFree_Click"/>
                     <TextBlock x:Name="HandsFreeHint" Margin="22,2,0,0" FontSize="12" Opacity="0.75" TextWrapping="Wrap"/>
                     <CheckBox x:Name="SimpleSyntaxBox" Margin="0,10,0,0" Click="SimpleSyntax_Click"/>
+                    <CheckBox x:Name="HesitationsBox" Margin="0,10,0,0" Click="Hesitations_Click"/>
                     <CheckBox x:Name="KeepOnClipboardBox" Margin="0,10,0,0" Click="KeepOnClipboard_Click"/>
                     <CheckBox x:Name="AutostartBox" Margin="0,10,0,0" Click="Autostart_Click"/>
                     <CheckBox x:Name="UpdatesBox" Margin="0,10,0,0" Click="Updates_Click"/>
@@ -104,6 +105,8 @@
                     <Button x:Name="DeleteBrainButton" Margin="110,8,0,0" HorizontalAlignment="Left" Padding="10,3" Click="DeleteBrain_Click"/>
                     <CheckBox x:Name="EveryTakeBox" Margin="0,16,0,0" Click="EveryTake_Click"/>
                     <TextBlock x:Name="EveryTakeHint" Margin="28,2,0,0" FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
+                    <CheckBox x:Name="SkipShortBox" Margin="28,10,0,0" Click="SkipShort_Click"/>
+                    <TextBlock x:Name="SkipShortHint" Margin="56,2,0,0" FontSize="12" Opacity="0.7" TextWrapping="Wrap"/>
                     <Expander x:Name="PromptExpander" Margin="0,10,0,0">
                         <TextBox x:Name="PromptBox" Margin="0,6,0,0" Padding="7" Height="120" LostFocus="Prompt_LostFocus"
                                  TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" AcceptsReturn="True"/>

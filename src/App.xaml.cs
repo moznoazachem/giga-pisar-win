@@ -691,6 +691,7 @@ public partial class PisarApp : Application
                     return;
                 }
                 text = await Task.Run(() => model.Transcribe(samples, Recorder.SampleRate));
+                if (_settings.DropHesitations) text = Hesitations.Removed(text);
                 if (Brain.CancelledBody(text) is { } kept)
                 {
                     // Said "Писарь, отмена": paste nothing, but keep the words for "Copy last dictation".
@@ -721,7 +722,7 @@ public partial class PisarApp : Application
                 else if (text.Length > 0 && BrainUsable)
                 {
                     var cmd = Brain.ParseCommand(text);
-                    if (cmd != null || _settings.BrainEveryTake)
+                    if (cmd != null || (_settings.BrainEveryTake && !Brain.TooShortToEdit(text, _settings.BrainSkipShort)))
                     {
                         string body = cmd?.body ?? text;
                         if (cmd != null) Log.Write($"brain command, {body.Length} chars");

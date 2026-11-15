@@ -107,6 +107,12 @@ public static partial class Brain
         "не могу", "я не буду", "извините", "расшифровк", "как ии", "как языковая модель",
     ];
 
+    public const int SkipShortWords = 12;
+
+    /// <summary>A short take is fine as dictated: no request, no wait. Commands are not asked here, they always run.</summary>
+    public static bool TooShortToEdit(string body, bool skipShort) =>
+        skipShort && body.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length < SkipShortWords;
+
     private static bool LooksLikeRefusal(string answer, string body)
     {
         var a = answer.ToLowerInvariant();

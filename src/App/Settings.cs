@@ -25,10 +25,14 @@ public sealed class Settings
     public BrainSource Brain { get; set; } = BrainSource.Off;
     /// <summary>Send every take through the Brain, not only those ending with "Pisar, …".</summary>
     public bool BrainEveryTake { get; set; }
+    /// <summary>With "edit on the fly", a take shorter than 12 words goes in as dictated, with no request (#17).</summary>
+    public bool BrainSkipShort { get; set; } = true;
     /// <summary>With text selected at the key press, the take is a command on the selection. On by default, as on macOS.</summary>
     public bool BrainOnSelection { get; set; } = true;
     /// <summary>A single dictated sentence goes in lowercase and without the closing period, like a chat reply.</summary>
     public bool SimpleSyntax { get; set; }
+    /// <summary>Cut "э-э" and "м-м" out of every take, on this computer and with the Brain off (mac #52). On by default, as on Android.</summary>
+    public bool DropHesitations { get; set; } = true;
 
     /// <summary>Leave each dictation on the clipboard as an ordinary copy (VMs, remote desktops).</summary>
     public bool KeepOnClipboard { get; set; }

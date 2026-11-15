@@ -23,6 +23,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Run the tests
+        run: dotnet test tests/GigaPisar.Tests -nologo
+
       - name: Publish the app
         run: dotnet publish src/GigaPisar.csproj -c Release -r win-x64 --self-contained true -o dist/app -nologo
 
