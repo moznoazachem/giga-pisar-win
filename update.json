@@ -1,8 +1,8 @@
 {
-  "version": "1.0.20",
-  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.20/GigaPisar-Setup.exe",
-  "sha256": "3329b3056709783dbf0214d1a745794cc34c767bb44611e41fa930c190247936",
-  "size": 55248393,
-  "notes": "Исправлен запуск на Windows 10 с новыми процессорами (Intel 11-го поколения и новее, AMD Ryzen 5000 и новее). Раньше на таких компьютерах Писарь закрывался сразу при запуске, не показав окна.",
-  "notes_en": "Fixed startup on Windows 10 with recent processors (Intel 11th gen and newer, AMD Ryzen 5000 and newer). On such computers Pisar used to close right at startup without showing a window."
+  "version": "1.0.21",
+  "url": "https://github.com/moznoazachem/giga-pisar-win/releases/download/v1.0.21/GigaPisar-Setup.exe",
+  "sha256": "1a7d0156e54295704c56639cfb6d32ec3c80263c36802b8c0a87fe509017b064",
+  "size": 55254098,
+  "notes": "«Убирать «э-э» и «м-м»»: звуки-запинки вырезаются из диктовки прямо на компьютере, без Мозга и без интернета, включено сразу. «Короткие без правки»: при «Править на лету» диктовка короче 12 слов вставляется сразу и никуда не отправляется, команды после слова «Писарь» выполняются всегда.",
+  "notes_en": "\"Remove uh and um\": hesitation sounds are cut out of the take on the computer itself, without the Brain and offline, on by default. \"Short takes as dictated\": with \"Edit on the fly\" a take shorter than 12 words goes in at once and is sent nowhere, commands after \"Pisar\" always run."
 }
