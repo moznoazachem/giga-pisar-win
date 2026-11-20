@@ -278,6 +278,9 @@ public partial class PisarApp : Application
             w.Topmost = true;
             w.Show();
             w.Activate();
+            await Task.Delay(700);
+            if (kind == "settings") sw.HesitationsBox.BringIntoView();
+            if (kind == "brain") sw.SkipShortHint.BringIntoView();
             await Task.Delay(1500);
             var hwnd = new System.Windows.Interop.WindowInteropHelper(w).Handle;
             if (Native.DwmGetWindowAttribute(hwnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out var r, System.Runtime.InteropServices.Marshal.SizeOf<Native.RECT>()) != 0)
