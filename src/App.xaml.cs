@@ -269,6 +269,7 @@ public partial class PisarApp : Application
                 CleanupEndpointUrl = "https://api.deepseek.com/v1",
                 CleanupApiKey = keyFile != null && File.Exists(keyFile) ? File.ReadAllText(keyFile).Trim() : "sk-00000000000000000000000000000000",
                 CleanupModel = "deepseek-flash",
+                BrainEveryTake = true,
             };
             var sw = new SettingsWindow(s, () => { }, () => { }, _ => Task.CompletedTask);
             sw.ShowPage(kind switch { "brain" or "server" => SettingsWindow.Page.Brain, "about" => SettingsWindow.Page.About, "edit" => SettingsWindow.Page.Edit, _ => SettingsWindow.Page.Dictation });

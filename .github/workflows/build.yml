@@ -69,6 +69,21 @@ jobs:
           "exit code: $($p.ExitCode)"
           if ($p.ExitCode -eq -2146233082) { throw "the .NET runtime failed to start (0x80131506)" }
 
+      - name: Settings screenshots (temporary check)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory shots | Out-Null
+          foreach ($k in 'settings','edit','brain') { foreach ($l in 'ru','en') {
+            $p = Start-Process dist/app/GigaPisar.exe -ArgumentList '--shot', $k, "$PWD\shots\$k-$l.png", $l -PassThru
+            if (-not $p.WaitForExit(60000)) { $p.Kill(); "timeout $k $l" } else { "$k $l exit $($p.ExitCode)" }
+          } }
+          Get-ChildItem shots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shots
+          path: shots
+
       # onnxruntime.dll needs the Visual C++ runtime, which a clean Windows 10 lacks.
       # Microsoft allows shipping these files next to an application.
       - name: Bundle the Visual C++ runtime
