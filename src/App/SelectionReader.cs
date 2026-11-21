@@ -60,6 +60,43 @@ public static class SelectionReader
         return work.Result;
     }
 
+    /// <summary>
+    /// The character right before the caret of the focused text control, or null when there is none
+    /// (start of the field), something is selected, or the app does not say in time. Never in terminals.
+    /// </summary>
+    public static async Task<char?> CharBeforeCaretAsync()
+    {
+        var fg = Native.GetForegroundWindow();
+        if (fg == IntPtr.Zero || IsTerminal(fg)) return null;
+        var work = Task.Run(ReadCharBeforeCaret);
+        var done = await Task.WhenAny(work, Task.Delay(CaretTimeout));
+        return done == work ? work.Result : null;
+    }
+
+    private static readonly TimeSpan CaretTimeout = TimeSpan.FromMilliseconds(400);
+
+    private static char? ReadCharBeforeCaret()
+    {
+        try
+        {
+            var focused = AutomationElement.FocusedElement;
+            if (focused == null) return null;
+            if (!focused.TryGetCurrentPattern(TextPattern.Pattern, out var p) || p is not TextPattern text) return null;
+            var ranges = text.GetSelection();
+            if (ranges.Length != 1) return null;
+            if (ranges[0].GetText(1).Length > 0) return null;   // a selection: the paste replaces it
+            var r = ranges[0].Clone();
+            if (r.MoveEndpointByUnit(TextPatternRangeEndpoint.Start, TextUnit.Character, -1) == 0) return null;
+            var s = r.GetText(2);
+            return s.Length == 1 ? s[0] : null;
+        }
+        catch (Exception e)
+        {
+            Log.Write($"caret: {e.GetType().Name}");
+            return null;
+        }
+    }
+
     private static string ClassOf(IntPtr hwnd)
     {
         var sb = new StringBuilder(128);

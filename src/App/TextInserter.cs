@@ -24,6 +24,8 @@ public static class TextInserter
     private const int ClipboardRestoreDelayMs = 800;
     private const int ErrorAccessDenied = 5;
     private const int VmClipboardSyncMs = 250;
+    // A guest reads the shared clipboard later than a local app does: the previous content returns after this.
+    private const int VmClipboardRestoreDelayMs = 2500;
     private static readonly SemaphoreSlim ClipboardGate = new(1, 1);
 
     /// <summary>Leave each dictation on the clipboard as an ordinary copy (the setting).</summary>
@@ -53,12 +55,22 @@ public static class TextInserter
         }
     }
 
-    public static InsertResult Insert(string text, InsertMode mode, CancellationToken cancellationToken = default)
+    /// <param name="spaceFirst">Press Space before pasting: the caret is known to stand right after a word (#19).</param>
+    public static InsertResult Insert(string text, InsertMode mode, CancellationToken cancellationToken = default,
+        bool spaceFirst = false)
     {
         if (string.IsNullOrEmpty(text)) return InsertResult.Done;
         bool vm = ForegroundIsVirtualMachine();
         if (vm) Log.Write("insert: virtual machine window, pasting a plain copy");
-        return mode == InsertMode.Paste || vm ? Paste(text, cancellationToken, plain: vm) : Type(text);
+        if (mode != InsertMode.Paste && !vm) return Type(spaceFirst ? " " + text : text);
+        // Typed, not pasted with the text: some apps trim the edges of a pasted fragment.
+        if (spaceFirst && !vm)
+        {
+            if (!Send(new[] { Key(0, ' ', Native.KEYEVENTF_UNICODE), Key(0, ' ', Native.KEYEVENTF_UNICODE | Native.KEYEVENTF_KEYUP) }))
+                return InsertResult.Blocked;
+            Thread.Sleep(BatchPauseMs);
+        }
+        return Paste(text, cancellationToken, plain: vm);
     }
 
     public static InsertResult Type(string text)
@@ -89,6 +101,7 @@ public static class TextInserter
 
     public static InsertResult Paste(string text, CancellationToken cancellationToken = default, bool plain = false)
     {
+        bool vm = plain;
         plain |= KeepOnClipboard;
         ClipboardGate.Wait(cancellationToken);
         bool restoreOwnsGate = false;
@@ -139,9 +152,10 @@ public static class TextInserter
 
             // Recording may resume as soon as Ctrl+V is sent. Keep clipboard operations serialized
             // until the target has had time to read it, even when there is no snapshot to restore.
-            if (plain) return InsertResult.Done;   // the dictation stays, as asked or for the VM's guest
+            if (KeepOnClipboard) return InsertResult.Done;   // the dictation stays, as asked
+            // A VM's guest gets a longer moment, then the previous clipboard returns there too (#21).
             restoreOwnsGate = true;
-            _ = RestoreClipboardAsync(ui, saved, sequence, cancellationToken);
+            _ = RestoreClipboardAsync(ui, saved, sequence, vm ? VmClipboardRestoreDelayMs : ClipboardRestoreDelayMs, cancellationToken);
             return InsertResult.Done;
         }
         finally
@@ -151,11 +165,11 @@ public static class TextInserter
     }
 
     private static async Task RestoreClipboardAsync(Dispatcher ui, IDataObject? saved, uint sequence,
-        CancellationToken cancellationToken)
+        int delayMs, CancellationToken cancellationToken)
     {
         try
         {
-            await Task.Delay(ClipboardRestoreDelayMs, cancellationToken).ConfigureAwait(false);
+            await Task.Delay(delayMs, cancellationToken).ConfigureAwait(false);
             if (sequence == 0 || ui.HasShutdownStarted || ui.HasShutdownFinished) return;
             await ui.InvokeAsync(() =>
             {

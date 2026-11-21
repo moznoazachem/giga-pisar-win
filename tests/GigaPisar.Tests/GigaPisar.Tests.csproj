@@ -27,6 +27,7 @@
     <Compile Include="..\..\src\App\Recorder.cs" Link="App\Recorder.cs" />
     <Compile Include="..\..\src\App\IdleCache.cs" Link="App\IdleCache.cs" />
     <Compile Include="..\..\src\App\Hesitations.cs" Link="App\Hesitations.cs" />
+    <Compile Include="..\..\src\App\Spacing.cs" Link="App\Spacing.cs" />
   </ItemGroup>
 
 </Project>

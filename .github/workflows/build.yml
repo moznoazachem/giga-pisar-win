@@ -25,7 +25,7 @@ jobs:
 
       # Only the text tests for now: the capture tests fell behind Recorder.cs and fail on their own.
       - name: Run the text tests
-        run: dotnet test tests/GigaPisar.Tests -nologo --filter "FullyQualifiedName~HesitationsTests"
+        run: dotnet test tests/GigaPisar.Tests -nologo --filter "FullyQualifiedName~HesitationsTests|FullyQualifiedName~SpacingTests"
 
       - name: Publish the app
         run: dotnet publish src/GigaPisar.csproj -c Release -r win-x64 --self-contained true -o dist/app -nologo

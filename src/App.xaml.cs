@@ -765,7 +765,12 @@ public partial class PisarApp : Application
                 var mode = _settings.InsertMode;
                 TextInserter.KeepOnClipboard = _settings.KeepOnClipboard;
                 _lastText = text.TrimEnd();
-                var result = await Task.Run(() => TextInserter.Insert(text, mode, _lifetime.Token));
+                // The previous dictation's trailing space may not have survived the paste (#19):
+                // when the caret stands right after a word, a space goes in first.
+                bool spaceFirst = !editedSelection && mode == InsertMode.Paste
+                    && Spacing.NeedsSeparator(await SelectionReader.CharBeforeCaretAsync(), text);
+                if (spaceFirst) Log.Write("insert: a space first, the caret is right after a word");
+                var result = await Task.Run(() => TextInserter.Insert(text, mode, _lifetime.Token, spaceFirst));
                 if (result == InsertResult.Blocked)
                     Hint(L.T("Это окно запущено от администратора, вставить туда нельзя. Текст лежит в буфере обмена.",
                              "That window runs as administrator; typing into it is blocked. The text is on the clipboard."));
