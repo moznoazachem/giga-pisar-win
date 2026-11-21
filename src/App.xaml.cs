@@ -410,6 +410,19 @@ public partial class PisarApp : Application
                 Dispatcher.BeginInvoke(ShowSettings);
         }) { IsBackground = true, Name = "show-settings-signal" }.Start();
 
+        // The key is listened to before the model is here, so that a press gets an answer instead of silence.
+        try
+        {
+            _hook = new KeyboardHook(_settings.HotkeyVk);
+            _hook.Pressed += () => Dispatcher.BeginInvoke(() => _ = HandlePressAsync());
+            _hook.Released += () => Dispatcher.BeginInvoke(OnHotkeyReleased);
+            _hook.EscapePressed += () => Dispatcher.BeginInvoke(() => _ = CancelHandsFreeAsync());
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"hook failed: {ex}");
+        }
+
         if (!Core.Recognizer.ModelExists(Settings.ModelDir))
         {
             var ok = await new DownloadWindow(Settings.ModelDir).RunAsync();
@@ -438,18 +451,6 @@ public partial class PisarApp : Application
         _idleTimer.Start();
 
         _recorder.TakeTooLong += () => Dispatcher.BeginInvoke(() => { EndLock(); _ = HandleReleaseAsync(); });
-        try
-        {
-            _hook = new KeyboardHook(_settings.HotkeyVk);
-            _hook.Pressed += () => Dispatcher.BeginInvoke(() => _ = HandlePressAsync());
-            _hook.Released += () => Dispatcher.BeginInvoke(OnHotkeyReleased);
-            _hook.EscapePressed += () => Dispatcher.BeginInvoke(() => _ = CancelHandsFreeAsync());
-        }
-        catch (Exception ex)
-        {
-            Log.Write($"hook failed: {ex}");
-        }
-
         SetStatus(null);
         if (JustUpdated)
         {
@@ -519,6 +520,15 @@ public partial class PisarApp : Application
 
     private async Task HandlePressAsync()
     {
+        if (!_modelReady)
+        {
+            Hint(Core.Recognizer.ModelExists(Settings.ModelDir)
+                ? L.T("Модель распознавания ещё загружается. Диктовка заработает через несколько секунд.",
+                      "The speech model is still loading. Dictation will work in a few seconds.")
+                : L.T("Модель распознавания ещё качается. Диктовка заработает, как только она скачается.",
+                      "The speech model is still downloading. Dictation will work as soon as it is here."));
+            return;
+        }
         if (_locked)
         {
             // A single press ends a hands-free recording; its release is ours too.
