@@ -20,6 +20,7 @@ public static class SelectionReader
 {
     private const int MaxChars = 20_000;
     private static readonly TimeSpan Timeout = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan CaretTimeout = TimeSpan.FromMilliseconds(400);
 
     private static readonly string[] TerminalClasses =
         ["ConsoleWindowClass", "CASCADIA_HOSTING_WINDOW_CLASS", "mintty", "PuTTY", "VirtualConsoleClass"];
@@ -68,12 +69,14 @@ public static class SelectionReader
     {
         var fg = Native.GetForegroundWindow();
         if (fg == IntPtr.Zero || IsTerminal(fg)) return null;
-        var work = Task.Run(ReadCharBeforeCaret);
+        if (_caretInFlight is { IsCompleted: false }) return null;
+        var work = _caretInFlight = Task.Run(ReadCharBeforeCaret);
         var done = await Task.WhenAny(work, Task.Delay(CaretTimeout));
         return done == work ? work.Result : null;
     }
 
-    private static readonly TimeSpan CaretTimeout = TimeSpan.FromMilliseconds(400);
+    /// <summary>A caret read that has not finished yet (a hung app): no new ones pile up behind it.</summary>
+    private static Task<char?>? _caretInFlight;
 
     private static char? ReadCharBeforeCaret()
     {

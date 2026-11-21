@@ -64,12 +64,10 @@ public static class TextInserter
         if (vm) Log.Write("insert: virtual machine window, pasting a plain copy");
         if (mode != InsertMode.Paste && !vm) return Type(spaceFirst ? " " + text : text);
         // Typed, not pasted with the text: some apps trim the edges of a pasted fragment.
-        if (spaceFirst && !vm)
-        {
-            if (!Send(new[] { Key(0, ' ', Native.KEYEVENTF_UNICODE), Key(0, ' ', Native.KEYEVENTF_UNICODE | Native.KEYEVENTF_KEYUP) }))
-                return InsertResult.Blocked;
+        // A blocked window is reported by the paste itself, with the text already on the clipboard.
+        if (spaceFirst && !vm
+            && Send(new[] { Key(0, ' ', Native.KEYEVENTF_UNICODE), Key(0, ' ', Native.KEYEVENTF_UNICODE | Native.KEYEVENTF_KEYUP) }))
             Thread.Sleep(BatchPauseMs);
-        }
         return Paste(text, cancellationToken, plain: vm);
     }
 
